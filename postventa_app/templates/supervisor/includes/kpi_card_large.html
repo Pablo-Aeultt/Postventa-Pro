@@ -1,0 +1,292 @@
+<!-- KPI Card - Versión Grande para Detalle -->
+{% load custom_filters %}
+<div class="card border-0 shadow-sm" style="background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%); position: relative; overflow: hidden;">
+    <!-- Top accent bar -->
+    <div style="position: absolute; top: 0; left: 0; right: 0; height: 6px; background: linear-gradient(90deg, #1A4D4D 0%, #0d6efd 100%);"></div>
+    
+    <div class="card-body pt-5">
+        <!-- Header -->
+        <div class="mb-4">
+            <h4 class="card-title mb-1" style="color: #1A4D4D; font-weight: 700;">{{ kpi.nombre }}</h4>
+            <p class="text-muted small mb-0"><i class="fas fa-info-circle"></i> {{ kpi.descripcion }}</p>
+        </div>
+
+        <!-- Grid de información -->
+        <div class="row">
+            <!-- Valor principal -->
+            <div class="col-md-6">
+                <div class="mb-3">
+                    <small class="text-muted d-block mb-2">VALOR ACTUAL</small>
+                    {% if kpi.id == 'KPI_09' and kpi.datos_adicionales.categorias %}
+                        <!-- KPI_09: Mostrar categoría con mayor frecuencia -->
+                        {% with max_cat=kpi.datos_adicionales.categorias|first %}
+                        <div class="kpi-value" style="font-size: 3rem; color: #0d6efd;">
+                            {{ max_cat.porcentaje|floatformat:1 }}
+                        </div>
+                        <small class="text-muted">{{ kpi.unidad }} - Mayor: {{ max_cat.categoria }}</small>
+                        {% endwith %}
+                    {% elif kpi.id == 'KPI_12' and kpi.datos_adicionales.total %}
+                        <!-- KPI_12: Mostrar proporción pendientes/total -->
+                        <div class="kpi-value" style="font-size: 3rem; color: #0d6efd;">
+                            {{ kpi.datos_adicionales.pendientes }}/{{ kpi.datos_adicionales.total }}
+                        </div>
+                        <small class="text-muted">{{ kpi.unidad }} (Pendientes/Total)</small>
+                    {% elif kpi.valor is not None %}
+                        <div class="kpi-value" style="font-size: 3rem; color: #0d6efd;">
+                            {% if kpi.valor|is_percentage %}
+                                {{ kpi.valor|floatformat:1 }}
+                            {% else %}
+                                {% if kpi.valor > 1000 %}
+                                    {{ kpi.valor|floatformat:0 }}
+                                {% else %}
+                                    {{ kpi.valor|floatformat:2 }}
+                                {% endif %}
+                            {% endif %}
+                        </div>
+                        <small class="text-muted">{{ kpi.unidad }}</small>
+                    {% else %}
+                        <div class="text-muted">
+                            <i class="fas fa-info-circle"></i> Sin datos
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Información adicional -->
+            <div class="col-md-6">
+                <div class="mb-3">
+                    <small class="text-muted d-block mb-2">INFORMACIÓN</small>
+                    {% if kpi.id == 'KPI_09' and kpi.datos_adicionales.categorias %}
+                        <!-- Caso especial: KPI_09 con categorias -->
+                        <div style="font-size: 0.9rem;">
+                            <strong>Distribución de Fallas:</strong>
+                            {% if kpi.datos_adicionales.categorias %}
+                                <div style="position: relative; height: 250px; margin-top: 15px;">
+                                    <canvas id="chart_kpi_09" class="kpi-chart"></canvas>
+                                </div>
+                                <script type="text/javascript">
+                                document.addEventListener('DOMContentLoaded', function() {
+                                    setTimeout(function() {
+                                        if (typeof Chart !== 'undefined') {
+                                            const element = document.getElementById('chart_kpi_09');
+                                            if (element) {
+                                                const ctx = element.getContext('2d');
+                                                new Chart(ctx, {
+                                                    type: 'doughnut',
+                                                    data: {
+                                                        labels: [{% for cat in kpi.datos_adicionales.categorias %}'{{ cat.categoria }} ({{ cat.cantidad }})'{% if not forloop.last %},{% endif %}{% endfor %}],
+                                                        datasets: [{
+                                                            data: [{% for cat in kpi.datos_adicionales.categorias %}{{ cat.porcentaje }}{% if not forloop.last %},{% endif %}{% endfor %}],
+                                                            backgroundColor: ['#0d6efd', '#6f42c1', '#198754', '#fd7e14', '#dc3545', '#20c997', '#17a2b8', '#ffc107', '#6c757d'],
+                                                            borderColor: '#fff',
+                                                            borderWidth: 2
+                                                        }]
+                                                    },
+                                                    options: {
+                                                        responsive: true,
+                                                        maintainAspectRatio: false,
+                                                        plugins: {
+                                                            legend: { position: 'bottom' },
+                                                            tooltip: {
+                                                                callbacks: {
+                                                                    label: function(context) {
+                                                                        return context.label + ' - ' + context.parsed + '%';
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                });
+                                            }
+                                        }
+                                    }, 500);
+                                });
+                                </script>
+                            {% endif %}
+                        </div>
+                    {% elif kpi.id == 'KPI_11' and kpi.datos_adicionales.tecnicos %}
+                        <!-- Caso especial: KPI_11 con tecnicos -->
+                        <div style="font-size: 0.9rem;">
+                            <strong>Productividad por Técnico:</strong>
+                            <table class="table table-sm table-borderless mt-2">
+                                <thead>
+                                    <tr>
+                                        <th>Técnico</th>
+                                        <th class="text-end">Reclamos</th>
+                                        <th class="text-end">Visitas</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for tec in kpi.datos_adicionales.tecnicos %}
+                                    <tr>
+                                        <td>{{ tec.id_tecnico__nombre }}</td>
+                                        <td class="text-end">{{ tec.reclamos }}</td>
+                                        <td class="text-end">{{ tec.visitas }}</td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    {% elif kpi.id == 'KPI_12' %}
+                        <!-- Caso especial: KPI_12 - Estado de Reclamos -->
+                        <div style="font-size: 0.9rem;">
+                            <strong>Estado de Reclamos:</strong>
+                            <div style="position: relative; height: 250px; margin-top: 15px;">
+                                <canvas id="chart_kpi_12" class="kpi-chart"></canvas>
+                            </div>
+                            <script type="text/javascript">
+                            document.addEventListener('DOMContentLoaded', function() {
+                                setTimeout(function() {
+                                    if (typeof Chart !== 'undefined') {
+                                        const element = document.getElementById('chart_kpi_12');
+                                        if (element) {
+                                            const ctx = element.getContext('2d');
+                                            new Chart(ctx, {
+                                                type: 'bar',
+                                                data: {
+                                                    labels: ['Pendientes', 'Resueltos'],
+                                                    datasets: [{ 
+                                                        label: 'Reclamos', 
+                                                        data: [{{ kpi.datos_adicionales.pendientes|default:0 }}, {{ kpi.datos_adicionales.resueltos|default:0 }}],
+                                                        backgroundColor: ['#ff9800', '#28a745'],
+                                                        borderColor: ['#ff9800', '#28a745'],
+                                                        borderWidth: 1 
+                                                    }]
+                                                },
+                                                options: {
+                                                    indexAxis: 'y',
+                                                    responsive: true,
+                                                    maintainAspectRatio: false,
+                                                    plugins: {
+                                                        legend: { display: false },
+                                                        tooltip: {
+                                                            callbacks: {
+                                                                label: function(context) {
+                                                                    return context.parsed.x + ' reclamos';
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            });
+                                        }
+                                    }
+                                }, 500);
+                            });
+                            </script>
+                            <div style="margin-top: 15px; display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                                <div style="padding: 10px; background-color: #fff3cd; border-radius: 6px; text-align: center;">
+                                    <div style="font-size: 1.5rem; font-weight: bold; color: #ff9800;">{{ kpi.datos_adicionales.pendientes|default:0 }}</div>
+                                    <div style="font-size: 0.8rem; color: #666;">Pendientes</div>
+                                </div>
+                                <div style="padding: 10px; background-color: #d4edda; border-radius: 6px; text-align: center;">
+                                    <div style="font-size: 1.5rem; font-weight: bold; color: #28a745;">{{ kpi.datos_adicionales.resueltos|default:0 }}</div>
+                                    <div style="font-size: 0.8rem; color: #666;">Resueltos</div>
+                                </div>
+                            </div>
+                            <div style="margin-top: 10px; padding: 8px; background-color: #f0f0f0; border-radius: 6px; text-align: center; font-size: 0.85rem;">
+                                <strong>Total:</strong> {{ kpi.datos_adicionales.total|default:0 }} reclamos
+                            </div>
+                        </div>
+                    {% elif kpi.id == 'KPI_14' and kpi.datos_adicionales.proyectos %}
+                        <!-- Caso especial: KPI_14 con proyectos y satisfacción -->
+                        <div style="font-size: 0.9rem;">
+                            <strong>Satisfacción por Proyecto:</strong>
+                            {% if kpi.datos_adicionales.proyectos %}
+                                <div style="position: relative; height: 250px; margin-top: 15px;">
+                                    <canvas id="chart_kpi_14" class="kpi-chart"></canvas>
+                                </div>
+                                <script type="text/javascript">
+                                document.addEventListener('DOMContentLoaded', function() {
+                                    setTimeout(function() {
+                                        if (typeof Chart !== 'undefined') {
+                                            const element = document.getElementById('chart_kpi_14');
+                                            if (element) {
+                                                const ctx = element.getContext('2d');
+                                                new Chart(ctx, {
+                                                    type: 'bar',
+                                                    data: {
+                                                        labels: [{% for proy in kpi.datos_adicionales.proyectos %}'{{ proy.proyecto__nombre }}'{% if not forloop.last %},{% endif %}{% endfor %}],
+                                                        datasets: [{ label: 'Satisfacción %', data: [{% for proy in kpi.datos_adicionales.proyectos %}{{ proy.satisfaccion }}{% if not forloop.last %},{% endif %}{% endfor %}], backgroundColor: '#198754', borderColor: '#198754', borderWidth: 1 }]
+                                                    },
+                                                    options: {
+                                                        indexAxis: 'y',
+                                                        responsive: true,
+                                                        maintainAspectRatio: false,
+                                                        scales: { x: { max: 100 } },
+                                                        plugins: {
+                                                            legend: { display: false },
+                                                            tooltip: {
+                                                                callbacks: {
+                                                                    label: function(context) {
+                                                                        return context.parsed.x + '%';
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                });
+                                            }
+                                        }
+                                    }, 500);
+                                });
+                                </script>
+                            {% endif %}
+                        </div>
+                    {% else %}
+                        <!-- Casos normales -->
+                        <dl class="row mb-0" style="font-size: 0.9rem;">
+                            {% if kpi.id == 'KPI_03' and kpi.datos_adicionales.total %}
+                                <dt class="col-sm-6">Reclamos resueltos:</dt>
+                                <dd class="col-sm-6"><strong>{{ kpi.datos_adicionales.total }}</strong></dd>
+                            {% elif kpi.id == 'KPI_05' and kpi.datos_adicionales.total %}
+                                <dt class="col-sm-6">Reclamos finalizados:</dt>
+                                <dd class="col-sm-6"><strong>{{ kpi.datos_adicionales.total }}</strong></dd>
+                                <dt class="col-sm-6">Primera visita:</dt>
+                                <dd class="col-sm-6"><strong>{{ kpi.datos_adicionales.primera_visita }}</strong></dd>
+                            {% elif kpi.id == 'KPI_07' and kpi.datos_adicionales.total %}
+                                <dt class="col-sm-6">Total reclamos:</dt>
+                                <dd class="col-sm-6"><strong>{{ kpi.datos_adicionales.total }}</strong></dd>
+                                <dt class="col-sm-6">Costo total:</dt>
+                                <dd class="col-sm-6"><strong>${{ kpi.datos_adicionales.costo_total|floatformat:2 }}</strong></dd>
+                            {% elif kpi.id == 'KPI_08' and kpi.datos_adicionales.reclamos %}
+                                <dt class="col-sm-6">Casos con materiales:</dt>
+                                <dd class="col-sm-6"><strong>{{ kpi.datos_adicionales.reclamos }}</strong></dd>
+                            {% elif kpi.id == 'KPI_15' and kpi.datos_adicionales.total %}
+                                <dt class="col-sm-6">Total reclamos:</dt>
+                                <dd class="col-sm-6"><strong>{{ kpi.datos_adicionales.total }}</strong></dd>
+                                {% if kpi.datos_adicionales.reprocesos %}
+                                <dt class="col-sm-6">Reprocesos:</dt>
+                                <dd class="col-sm-6"><strong>{{ kpi.datos_adicionales.reprocesos }}</strong></dd>
+                                {% endif %}
+                            {% elif kpi.datos_adicionales.total and kpi.id != 'KPI_05' %}
+                                <dt class="col-sm-6">Total:</dt>
+                                <dd class="col-sm-6"><strong>{{ kpi.datos_adicionales.total }}</strong></dd>
+                            {% endif %}
+                            {% if kpi.datos_adicionales.cumplidas %}
+                                <dt class="col-sm-6">Cumplidas:</dt>
+                                <dd class="col-sm-6"><strong>{{ kpi.datos_adicionales.cumplidas }}</strong></dd>
+                            {% endif %}
+                            {% if kpi.datos_adicionales.citas %}
+                                <dt class="col-sm-6">Citas:</dt>
+                                <dd class="col-sm-6"><strong>{{ kpi.datos_adicionales.citas }}</strong></dd>
+                            {% endif %}
+                            {% if kpi.datos_adicionales.tecnicos and kpi.id != 'KPI_11' %}
+                                <dt class="col-sm-6">Técnicos:</dt>
+                                <dd class="col-sm-6"><strong>{{ kpi.datos_adicionales.tecnicos }}</strong></dd>
+                            {% endif %}
+                            {% if kpi.datos_adicionales.error %}
+                                <dt class="col-sm-12">
+                                    <span class="badge bg-warning">Nota:</span>
+                                    {{ kpi.datos_adicionales.error }}
+                                </dt>
+                            {% endif %}
+                        </dl>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+
+    </div>
+</div>

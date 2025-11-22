@@ -1,0 +1,785 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Mis Reclamos - Postventa Pro{% endblock %}
+
+{% block extra_css %}
+<style>
+    
+    
+    .user-info {
+        background: white;
+        padding: 25px;
+        border-radius: 15px;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+        margin-bottom: 30px;
+    }
+    
+    .reclamo-card {
+        background: white;
+        border-radius: 15px;
+        padding: 25px;
+        margin-bottom: 20px;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+        transition: all 0.3s;
+        border-left: 4px solid var(--color-primary);
+    }
+    
+    .reclamo-card:hover {
+        box-shadow: 0 5px 20px rgba(0,0,0,0.15);
+        transform: translateY(-2px);
+    }
+    
+    .estado-badge {
+        padding: 8px 16px;
+        border-radius: 20px;
+        font-weight: 600;
+        font-size: 0.875rem;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+    }
+    
+    .estado-pendiente { background: #fff3cd; color: #856404; }
+    .estado-asignado { background: #cfe2ff; color: #084298; }
+    .estado-en_proceso { background: #d1ecf1; color: #0c5460; }
+    .estado-resuelto { background: #d1e7dd; color: #0f5132; }
+    .estado-cerrado { background: #e2e3e5; color: #383d41; }
+    .estado-cancelado { background: #f8d7da; color: #842029; }
+    
+    .btn-primary-custom {
+        background: linear-gradient(135deg, var(--color-primary), var(--color-secondary));
+        border: none;
+        color: white;
+        padding: 12px 30px;
+        border-radius: 10px;
+        font-weight: 600;
+        transition: all 0.3s;
+    }
+    
+    .btn-primary-custom:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 5px 15px rgba(26, 77, 77, 0.3);
+        color: white;
+    }
+
+    .btn-outline-secondary {
+        border: 2px solid #1A4D4D !important;
+        color: #1A4D4D !important;
+        background: transparent;
+        font-weight: 600;
+        transition: all 0.3s ease;
+    }
+
+    .btn-outline-secondary:hover {
+        background: #1A4D4D !important;
+        color: white !important;
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(26, 77, 77, 0.2);
+    }
+
+    /* Botones plataforma: outline primary/danger coherentes con la paleta */
+    .btn-outline-primary {
+        border: 2px solid var(--color-primary) !important;
+        color: var(--color-primary) !important;
+        background: transparent;
+        font-weight: 600;
+        transition: all 0.3s ease;
+        border-radius: 6px;
+    }
+    .btn-outline-primary:hover {
+        background: var(--color-primary) !important;
+        color: #fff !important;
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(26, 77, 77, 0.2);
+    }
+    .btn-outline-danger {
+        border: 2px solid var(--color-danger) !important;
+        color: var(--color-danger) !important;
+        background: transparent;
+        font-weight: 600;
+        transition: all 0.3s ease;
+        border-radius: 6px;
+    }
+    .btn-outline-danger:hover {
+        background: var(--color-danger) !important;
+        color: #fff !important;
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(220, 53, 69, 0.2);
+    }
+
+    .empty-state {
+        text-align: center;
+        padding: 80px 20px;
+        background: white;
+        border-radius: 15px;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+    }
+    
+    .empty-state i {
+        font-size: 80px;
+        color: var(--color-secondary);
+        opacity: 0.5;
+    }
+    
+    .stats-card {
+        background: white;
+        padding: 20px;
+        border-radius: 12px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+        text-align: center;
+        transition: all 0.3s;
+    }
+    
+    .stats-card:hover {
+        transform: translateY(-4px);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+    }
+    
+    .stats-card .stats-number {
+        font-size: 32px;
+        font-weight: 700;
+        color: var(--color-primary);
+        margin-bottom: 5px;
+    }
+    
+    .stats-card .stats-label {
+        color: #6c757d;
+        font-size: 14px;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+
+    /* Estilo plataforma para el modal de reagendar */
+    .reagendar-modal .modal-content {
+        border-radius: 16px;
+        border-left: 4px solid var(--color-primary);
+        box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+    }
+    .reagendar-modal .modal-header {
+        background: linear-gradient(135deg, var(--color-primary), var(--color-secondary));
+        color: #fff !important;
+        border-bottom: none;
+    }
+    .reagendar-modal .modal-header .modal-title {
+        color: white !important;
+        font-weight: 600;
+    }
+    .reagendar-modal .modal-header .btn-close {
+        filter: invert(1);
+    }
+    
+    /* Estilos genéricos para todos los modales con header gradiente */
+    .modal-header {
+        background: linear-gradient(135deg, var(--color-primary), var(--color-secondary));
+        color: #fff !important;
+        border-bottom: none;
+    }
+    .modal-header .modal-title {
+        color: white !important;
+        font-weight: 600;
+    }
+    .modal-header .btn-close {
+        filter: invert(1);
+    }
+    .cancelar-modal-header {
+        background: linear-gradient(135deg, var(--color-primary), var(--color-secondary));
+        color: #fff !important;
+        border-bottom: none;
+    }
+    .cancelar-modal-header .modal-title {
+        color: white !important;
+        font-weight: 600;
+    }
+    .cancelar-modal-header .btn-close {
+        filter: invert(1);
+    }
+    .reagendar-modal .modal-title i { margin-right: 8px; }
+    .reagendar-modal .modal-body { padding-top: 1rem; }
+    .reagendar-modal .modal-footer { border-top: none; }
+    .reagendar-modal .list-group-item {
+        border-radius: 10px !important;
+        margin-bottom: 8px;
+        border: 1px solid #e9ecef;
+        transition: background 0.2s ease, transform 0.1s ease;
+    }
+    .reagendar-modal .list-group-item:hover {
+        background: #f8f9fa;
+        transform: translateY(-1px);
+    }
+    .reagendar-modal .form-check-input {
+        width: 1.1rem;
+        height: 1.1rem;
+    }
+    .reagendar-modal .btn-confirmar {
+        background: linear-gradient(135deg, var(--color-primary), var(--color-secondary));
+        border: none;
+        color: white;
+        font-weight: 600;
+        transition: all 0.3s;
+    }
+    .reagendar-modal .btn-confirmar:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 5px 15px rgba(26, 77, 77, 0.3);
+        color: white;
+    }
+
+    /* === Estilos del Historial (para aplicar en dashboards) === */
+    .card-custom {
+        background: #fff;
+        border-radius: 18px;
+        box-shadow: 0 4px 14px rgba(0,0,0,0.08);
+        border-left: 4px solid var(--color-primary);
+        overflow: hidden;
+        margin-bottom: 20px;
+    }
+    .card-header-custom {
+        background: linear-gradient(135deg, var(--color-primary), var(--color-secondary));
+        color: #fff;
+        padding: 16px 24px;
+        font-weight: 600;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-size: 1.1rem;
+    }
+    .nav-pills .nav-link {
+        color: var(--color-primary);
+        border-radius: 10px;
+        font-weight: 500;
+        transition: all 0.3s ease;
+    }
+    .nav-pills .nav-link:hover {
+        background: rgba(26,77,77,0.1);
+    }
+    .nav-pills .nav-link.active {
+        background: var(--color-primary);
+        color: white;
+        box-shadow: 0 2px 8px rgba(26,77,77,0.3);
+    }
+    .table-hover tbody tr:hover {
+        background-color: rgba(26,77,77,0.05);
+    }
+
+    /* === Títulos y encabezados con estilo verde (historial) === */
+    h3, h4, h5 {
+        color: var(--color-primary) !important;
+        font-weight: 600 !important;
+    }
+    h3 i, h4 i, h5 i {
+        color: var(--color-primary) !important;
+        margin-right: 8px !important;
+    }
+    
+    .footer-custom.bg-dark, .footer-custom.bg-dark *, .footer-custom.bg-dark a, .footer-custom.bg-dark span, .footer-custom.bg-dark p, .footer-custom.bg-dark small {
+        color: #fff !important;
+    }
+    
+    /* === Mensajes del Sistema === */
+    .alert {
+        border-radius: 10px;
+        border-left: 4px solid;
+        margin-bottom: 20px;
+        font-weight: 500;
+        animation: slideDown 0.3s ease;
+    }
+    
+    @keyframes slideDown {
+        from {
+            opacity: 0;
+            transform: translateY(-20px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+    
+    .alert-success {
+        border-left-color: #198754;
+        background: #d1e7dd;
+        color: #0f5132;
+    }
+    
+    .alert-error {
+        border-left-color: #dc3545;
+        background: #f8d7da;
+        color: #842029;
+    }
+    
+    .alert-warning {
+        border-left-color: #ffc107;
+        background: #fff3cd;
+        color: #856404;
+    }
+    
+    .alert-info {
+        border-left-color: #0dcaf0;
+        background: #cfe2ff;
+        color: #084298;
+    }
+     
+ 
+
+    
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+
+    <!-- Información del Usuario -->
+    <div class="user-info">
+        <div class="row align-items-center">
+            <div class="col-md-8">
+                <h4 class="mb-2">
+                    <i class="bi bi-person-circle" style="color: var(--color-primary);"></i>
+                    {{ propietario.nombre }}
+                </h4>
+                <p class="text-muted mb-2">
+                    <i class="bi bi-credit-card-2-front"></i> RUT: {{ propietario.rut }} | 
+                    <i class="bi bi-envelope"></i> {{ propietario.email }} | 
+                    <i class="bi bi-telephone"></i> {{ propietario.telefono }}
+                </p>
+                
+            </div>
+        </div>
+    </div>
+    <br>
+    <!-- Estadísticas Rápidas -->
+    <div class="row mb-4">
+        <div class="col-md-3 mb-3">
+            <div class="stats-card">
+                <div class="stats-number">{{ reclamos.count }}</div>
+                <div class="stats-label"><i class="bi bi-clipboard"></i> Total Reclamos</div>
+            </div>
+        </div>
+        <div class="col-md-3 mb-3">
+            <div class="stats-card">
+                <div class="stats-number text-warning">{{ en_proceso }}</div>
+                <div class="stats-label"><i class="bi bi-clock"></i> En Proceso</div>
+            </div>
+        </div>
+        <div class="col-md-3 mb-3">
+            <div class="stats-card">
+                <div class="stats-number text-success">{{ resueltos }}</div>
+                <div class="stats-label"><i class="bi bi-check-circle"></i> Resueltos</div>
+            </div>
+        </div>
+        <div class="col-md-3 mb-3">
+            <div class="stats-card">
+                <div class="stats-number text-danger">{{ pendientes }}</div>
+                <div class="stats-label"><i class="bi bi-exclamation-circle"></i> Pendientes</div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Lista de Reclamos -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h3 class="mb-0"><i class="bi bi-clipboard-check"></i> Mis Reclamos</h3>
+    </div>
+    
+    {% if reclamos %}
+        {% for reclamo in reclamos %}
+            <div class="reclamo-card">
+                <div class="row align-items-center">
+                    <div class="col-md-9">
+                        <div class="d-flex align-items-center mb-2">
+                            <h5 class="mb-0 me-3">
+                                <i class="bi bi-hash"></i> Folio: <strong>{{ reclamo.numero_folio }}</strong>
+                            </h5>
+                            <span class="estado-badge estado-{{ reclamo.estado }}">
+                                <i class="bi bi-circle-fill" style="font-size: 8px;"></i>
+                                {{ reclamo.estado|title|default:"Sin estado" }}
+                            </span>
+                        </div>
+                        <div class="row mb-2">
+                            <div class="col-md-6">
+                                <p class="mb-1">
+                                    <i class="bi bi-tag-fill text-primary"></i> 
+                                    <strong>Categoría:</strong> {{ reclamo.categoria_nombre|default:"Sin categoría" }}
+                                </p>
+                                <p class="mb-1">
+                                    <i class="bi bi-house-door text-info"></i>
+                                    <strong>Unidad:</strong> {{ reclamo.unidad|default:"No especificada" }}
+                                </p>
+                            </div>
+                            <div class="col-md-6">
+                                <p class="mb-1">
+                                    <i class="bi bi-building text-secondary"></i>
+                                    <strong>Proyecto:</strong> {{ reclamo.proyecto.nombre|default:"No especificado" }}
+                                </p>
+                                <p class="mb-1">
+                                    <i class="bi bi-geo-alt text-danger"></i>
+                                    <strong>Dirección:</strong> {{ reclamo.proyecto.direccion|default:"No especificada" }}
+                                </p>
+
+                                {% with cita_activa=reclamo.citas_activas.0 %}
+                                    <div class="mb-1">
+                                        <div class="d-flex align-items-center">
+                                            <i class="bi bi-calendar-check text-success"></i>
+                                            <strong class="ms-1">Fecha de Cita:</strong>
+                                            {% if cita_activa %}
+                                                {% if cita_activa.fecha_programada %}
+                                                    <span class="ms-1">{{ cita_activa.fecha_programada|date:"d/m/Y" }}</span>
+                                                    <span class="ms-2"><strong>Hora:</strong> {{ cita_activa.fecha_programada|time:"H:i" }}</span>
+                                                    
+                                                {% else %}
+                                                    <span class="text-muted ms-1">No agendada</span>
+                                                {% endif %}
+                                            {% else %}
+                                                {# No hay citas activas; mirar última cita de cualquier estado #}
+                                                {% with cita_ultima=reclamo.citas_todas.0 %}
+                                                    {% if cita_ultima and cita_ultima.estado == 'cancelada' %}
+                                                        <span class="badge bg-light text-dark ms-2">Cancelada</span>
+                                                    {% else %}
+                                                        <span class="text-muted ms-1">No agendada</span>
+                                                    {% endif %}
+                                                {% endwith %}
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                {% endwith %}
+
+                                <!-- Botones según estado -->
+                                {% with cita=reclamo.citas_activas.0 %}
+                                <div class="mt-2 d-flex flex-wrap gap-2">
+                                    {# Mostrar cancelar reclamo en estados activos (no finales) #}
+                                    {% if reclamo.estado != 'cancelado' and reclamo.estado != 'cerrado' and reclamo.estado != 'resuelto' %}
+                                        <button type="button" class="btn btn-outline-danger btn-sm"
+                                                style="padding:2px 8px; font-size:0.78rem; border-radius:6px;"
+                                                data-bs-toggle="modal" data-bs-target="#cancelarReclamoModal-{{ reclamo.id_reclamo }}">
+                                            Cancelar reclamo
+                                        </button>
+                                    {% endif %}
+
+                                    {# Acciones de cita si hay cita activa #}
+                                    {% if cita %}
+                                        {% if reclamo.estado != 'resuelto' and reclamo.estado != 'cerrado' and reclamo.estado != 'cancelado' %}
+                                            {% if cita.estado == 'pendiente' or cita.estado == 'confirmada' %}
+                                                <button type="button"
+                                                        class="btn btn-outline-primary btn-sm"
+                                                        style="padding:2px 8px; font-size:0.78rem; border-radius:6px;"
+                                                        data-bs-toggle="modal"
+                                                        data-bs-target="#reagendarCitaModal-{{ cita.id_cita }}">
+                                                    Reagendar cita
+                                                </button>
+                                            {% endif %}
+                                        {% endif %}
+                                    {% else %}
+                                        {% if reclamo.estado == 'asignado' %}
+                                            <a href="{% url 'detalle_reclamo' reclamo.id_reclamo %}" class="btn btn-outline-secondary btn-sm"
+                                               style="padding:2px 8px; font-size:0.78rem; border-radius:6px;">
+                                                Agendar cita
+                                            </a>
+                                        {% endif %}
+                                    {% endif %}
+                                </div>
+                                {% endwith %}
+                                
+                                <!-- Historial de Citas Completadas/Canceladas -->
+                                {% if reclamo.citas_todas %}
+                                    {% with citas_historial=reclamo.citas_todas %}
+                                        {% if citas_historial|length > 1 %}
+                                            <div class="mt-3 pt-3 border-top">
+                                                <details>
+                                                    <summary class="text-muted" style="cursor:pointer; font-size:0.9rem;">
+                                                        <i class="bi bi-clock-history"></i> Historial de citas ({{ citas_historial|length }})
+                                                    </summary>
+                                                    <div class="mt-2" style="font-size:0.85rem;">
+                                                        {% for cita_hist in citas_historial %}
+                                                            {% if cita_hist.estado == 'completada' or cita_hist.estado == 'cancelada' %}
+                                                                <a href="{% url 'cliente_detalle_cita' cita_hist.id_cita %}" style="text-decoration:none; color:inherit;">
+                                                                    <div class="mb-2 p-2" style="background:#f9f9f9; border-radius:6px; border-left:3px solid {% if cita_hist.estado == 'completada' %}#28a745{% else %}#dc3545{% endif %}; cursor:pointer; transition: background-color 0.3s ease;" onmouseover="this.style.backgroundColor='#f0f0f0'" onmouseout="this.style.backgroundColor='#f9f9f9'">
+                                                                    <strong>{{ cita_hist.fecha_programada|date:"d/m/Y" }}</strong> a las <strong>{{ cita_hist.fecha_programada|time:"H:i" }}</strong>
+                                                                    <span class="badge {% if cita_hist.estado == 'completada' %}bg-success{% else %}bg-danger{% endif %} ms-2">{{ cita_hist.get_estado_display }}</span>
+                                                                </div>
+                                                                </a>
+                                                            {% endif %}
+                                                        {% endfor %}
+                                                    </div>
+                                                </details>
+                                            </div>
+                                        {% endif %}
+                                    {% endwith %}
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3 text-end">
+                        <a href="{% url 'detalle_reclamo' reclamo.id_reclamo %}" class="btn btn-primary-custom mb-2">
+                            <i class="bi bi-eye"></i> Ver Detalle
+                        </a>
+                    </div>
+                </div>
+            </div>
+        {% endfor %}
+                
+        {# Modales de cancelar reclamo #}
+        {% for reclamo in reclamos %}
+            {% if reclamo.estado != 'cancelado' and reclamo.estado != 'cerrado' and reclamo.estado != 'resuelto' %}
+                <div class="modal fade" id="cancelarReclamoModal-{{ reclamo.id_reclamo }}" tabindex="-1" aria-labelledby="cancelarReclamoLabel-{{ reclamo.id_reclamo }}" aria-hidden="true">
+                    <div class="modal-dialog modal-dialog-centered">
+                        <div class="modal-content">
+                            <div class="modal-header cancelar-modal-header">
+                                <h5 class="modal-title" id="cancelarReclamoLabel-{{ reclamo.id_reclamo }}">
+                                    <i class="bi bi-x-circle"></i> Cancelar reclamo
+                                </h5>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                            </div>
+                            <form method="post" action="{% url 'cancelar_reclamo' reclamo.id_reclamo %}" data-ajax="1">
+                                {% csrf_token %}
+                                <div class="modal-body">
+                                    <p>¿Estás seguro que deseas cancelar el reclamo <strong>#{{ reclamo.numero_folio }}</strong>? Esta acción no se puede deshacer.</p>
+                                </div>
+                                <div class="modal-footer">
+                                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cerrar</button>
+                                    <button type="submit" class="btn btn-danger">Cancelar reclamo</button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            {% endif %}
+        {% endfor %}
+        {# Modales de reagendar cita #}
+        {% for reclamo in reclamos %}
+            {% with cita=reclamo.citas_activas.0 %}
+                {% if cita %}
+                    {% if cita.estado == 'pendiente' or cita.estado == 'confirmada' %}
+                        <div class="modal fade reagendar-modal" id="reagendarCitaModal-{{ cita.id_cita }}" 
+                             tabindex="-1" aria-hidden="true"
+                             data-tecnico-id="{{ cita.id_tecnico.id_tecnico }}"
+                             data-reclamo-id="{{ reclamo.id_reclamo }}"
+                             data-cita-id="{{ cita.id_cita }}"
+                             data-fecha-actual="{{ cita.fecha_programada|date:'Y-m-d' }}"
+                             data-hora-actual="{{ cita.fecha_programada|time:'H:i' }}">
+                            <div class="modal-dialog modal-dialog-centered">
+                                <div class="modal-content">
+                                    <div class="modal-header">
+                                        <h5 class="modal-title"><i class="bi bi-calendar-week"></i> Reagendar cita</h5>
+                                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                    </div>
+                                    <form method="post" action="{% url 'reagendar_cita' cita.id_cita %}" data-ajax="1">
+                                        {% csrf_token %}
+                                        <div class="modal-body">
+                                            <p class="mb-2">Tu cita actual es el  <strong>{{ cita.fecha_programada|date:'d/m/Y' }}</strong> a las <strong>{{ cita.fecha_programada|time:'H:i' }}</strong></p>
+                                            <br>
+                                            <p class="mb-2">Selecciona un nuevo horario disponible:</p>
+                                            <div id="slots-container-{{ cita.id_cita }}" class="mb-2">
+                                                <div class="d-flex align-items-center text-muted">
+                                                    <div class="spinner-border spinner-border-sm me-2" role="status"></div>
+                                                    Cargando horarios disponibles...
+                                                </div>
+                                            </div>
+
+                                        </div>
+                                        <div class="modal-footer d-flex justify-content-end align-items-center gap-2">
+                                            <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cerrar</button>
+                                            <button type="submit" class="btn btn-confirmar" id="btn-confirmar-{{ cita.id_cita }}" disabled>Confirmar</button>
+                                        </div>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+                    {% endif %}
+                {% endif %}
+            {% endwith %}
+        {% endfor %}
+                
+    {% else %}
+        <div class="empty-state">
+            <i class="bi bi-inbox"></i>
+            <h4 class="mt-4 mb-2">No tienes reclamos aún</h4>
+            <p class="text-muted mb-4">Crea tu primer reclamo para comenzar a usar el sistema de postventa</p>
+            <a href="{% url 'crear_reclamo' %}" class="btn btn-primary-custom btn-lg">
+                <i class="bi bi-plus-circle-fill"></i> Crear Primer Reclamo
+            </a>
+        </div>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        
+        const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+        tooltipTriggerList.map(function (tooltipTriggerEl) {
+            return new bootstrap.Tooltip(tooltipTriggerEl);
+        });
+
+        // Mostrar mensaje guardado en sessionStorage después de AJAX
+        const mensaje = sessionStorage.getItem('mensajeReagendamiento');
+        console.log('Mensaje en sessionStorage:', mensaje);
+        if (mensaje) {
+            console.log('Limpiando sessionStorage para no duplicar mensajes');
+            sessionStorage.removeItem('mensajeReagendamiento');
+        }
+
+        // Interceptar envíos de formularios con data-ajax para hacer POST vía fetch y luego refrescar
+        document.querySelectorAll('form[data-ajax="1"]').forEach(function(form){
+            form.addEventListener('submit', function(e){
+                // Usar AJAX solo si el navegador soporta fetch
+                if (window.fetch) {
+                    e.preventDefault();
+                    const fd = new FormData(form);
+                    
+                    // Capturar info del horario seleccionado si es un modal de reagendar
+                    const modalEl = form.closest('.modal');
+                    let mensajeConfirmacion = null;
+                    console.log('Form action:', form.action);
+                    console.log('Modal element:', modalEl);
+                    if (modalEl) console.log('Modal ID:', modalEl.id);
+                    
+                    if (modalEl && modalEl.id.includes('reagendarCitaModal')) {
+                        const citaId = modalEl.dataset.citaId;
+                        const btnConfirmar = document.getElementById(`btn-confirmar-${citaId}`);
+                        if (btnConfirmar && btnConfirmar.dataset.fechaSeleccionada) {
+                            const horaFin = btnConfirmar.dataset.horaFin ? ` a ${btnConfirmar.dataset.horaFin}` : '';
+                            mensajeConfirmacion = `Cita reagendada exitosamente para el ${btnConfirmar.dataset.fechaSeleccionada} a las ${btnConfirmar.dataset.horaInicio}`;
+                        }
+                    } else if (modalEl && modalEl.id.includes('cancelarReclamoModal')) {
+                        // Mensaje para cancelar reclamo (busca el folio en el body si no está en el título)
+                        let folio = '';
+                        const strongInTitle = modalEl.querySelector('.modal-title strong');
+                        if (strongInTitle) {
+                            folio = strongInTitle.textContent;
+                        } else {
+                            // Busca en el body del modal
+                            const strongInBody = modalEl.querySelector('.modal-body strong');
+                            if (strongInBody) folio = strongInBody.textContent;
+                        }
+                        mensajeConfirmacion = `Reclamo cancelado exitosamente${folio ? ' (' + folio + ')' : ''}.`;
+                        console.log('Mensaje de cancelación preparado:', mensajeConfirmacion);
+                    }
+                    
+                    fetch(form.action, {
+                        method: 'POST',
+                        body: fd,
+                        headers: { 'X-Requested-With': 'XMLHttpRequest' }
+                    }).then(function(response){
+                        console.log('Respuesta recibida:', response);
+                        return response.json().then(function(data) {
+                            console.log('Datos JSON:', data);
+                            
+                            // Cerrar modal si existe
+                            if (modalEl) {
+                                const modal = bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl);
+                                modal.hide();
+                            }
+                            
+                            // NO guardar en sessionStorage, dejar que Django maneje los mensajes
+                            // El refresh de página va a mostrar los mensajes de Django automáticamente
+                            
+                            // Refrescar la página después de un pequeño delay
+                            setTimeout(function() {
+                                window.location.href = window.location.href.split('?')[0] + '?t=' + Date.now();
+                            }, 300);
+                        });
+                    }).catch(function(error){
+                        console.error('Error en la petición:', error);
+                        // Si falla, fallback a submit normal
+                        form.submit();
+                    });
+                }
+            });
+        });
+
+        // Al abrir un modal de reagendar, cargar horarios por AJAX y renderizar radios
+        const reagendarModals = document.querySelectorAll('[id^="reagendarCitaModal-"]');
+        reagendarModals.forEach(function(modalEl){
+            modalEl.addEventListener('show.bs.modal', function(){
+                const idMatch = modalEl.id.match(/reagendarCitaModal-(\d+)/);
+                if (!idMatch) return;
+                const citaId = idMatch[1];
+                const container = document.getElementById('slots-container-' + citaId);
+                if (!container) return;
+                container.innerHTML = '<div class="d-flex align-items-center text-muted"><div class="spinner-border spinner-border-sm me-2" role="status"></div>Cargando horarios disponibles...</div>';
+                
+                const tecnicoId = modalEl.dataset.tecnicoId;
+                const fechaActual = modalEl.dataset.fechaActual;
+                const horaActual = modalEl.dataset.horaActual;
+                fetch(`/api/tecnicos/?tecnico_id=${tecnicoId}&excluir_cita_id=${citaId}`, { headers: { 'X-Requested-With': 'XMLHttpRequest' }})
+                    .then(r => r.json())
+                    .then(data => {
+                        const tecnico = data.tecnicos && data.tecnicos[0];
+                        if (!tecnico || !tecnico.proximos_horarios || tecnico.proximos_horarios.length === 0) {
+                            container.innerHTML = '<div class="alert alert-info mb-0">No hay horarios disponibles próximamente para este técnico. Intenta más tarde.</div>';
+                            return;
+                        }
+                        
+                        // Filtrar el horario actual de la cita
+                        const horariosDisponibles = tecnico.proximos_horarios.filter(h => {
+                            const horarioInicio = h.hora_inicio.substring(0, 5);
+                            return !(h.fecha === fechaActual && horarioInicio === horaActual);
+                        });
+                        
+                        if (horariosDisponibles.length === 0) {
+                            container.innerHTML = '<div class="alert alert-info mb-0">No hay otros horarios disponibles próximamente para este técnico. Intenta más tarde.</div>';
+                            return;
+                        }
+                        
+                        // Agrupar horarios por fecha
+                        const horariosPorFecha = {};
+                        horariosDisponibles.forEach(h => {
+                            if (!horariosPorFecha[h.fecha]) {
+                                horariosPorFecha[h.fecha] = [];
+                            }
+                            horariosPorFecha[h.fecha].push(h);
+                        });
+                        
+                        // Construir lista de radios
+                        const list = document.createElement('div');
+                        list.className = 'list-group';
+                        
+                        const fechasOrdenadas = Object.keys(horariosPorFecha).sort().slice(0, 7);
+                        fechasOrdenadas.forEach(fecha => {
+                            const horarios = horariosPorFecha[fecha];
+                            const fechaObj = new Date(fecha + 'T00:00:00');
+                            const opciones = { weekday: 'long', day: 'numeric', month: 'long' };
+                            const fechaFormateada = fechaObj.toLocaleDateString('es-CL', opciones).replace(',', '');
+                            
+                            horarios.forEach(h => {
+                                const label = document.createElement('label');
+                                label.className = 'list-group-item d-flex align-items-center';
+                                const input = document.createElement('input');
+                                input.type = 'radio';
+                                input.name = 'slot';
+                                input.required = true;
+                                input.className = 'form-check-input me-2';
+                                input.value = `${fecha}|${h.hora_inicio}`;
+                                
+                                // Agregar evento para habilitar botón y guardar info del horario
+                                input.addEventListener('change', function() {
+                                    const btnConfirmar = document.getElementById(`btn-confirmar-${citaId}`);
+                                    btnConfirmar.disabled = false;
+                                    
+                                    // Guardar info del horario seleccionado en el botón
+                                    const horaInicio = h.hora_inicio.substring(0, 5);
+                                    const horaFin = h.hora_fin ? h.hora_fin.substring(0, 5) : '';
+                                    btnConfirmar.dataset.fechaSeleccionada = fechaFormateada;
+                                    btnConfirmar.dataset.horaInicio = horaInicio;
+                                    btnConfirmar.dataset.horaFin = horaFin;
+                                });
+                                
+                                const span = document.createElement('span');
+                                const horaInicio = h.hora_inicio.substring(0, 5);
+                                const horaFin = h.hora_fin ? h.hora_fin.substring(0, 5) : '';
+                                span.innerHTML = `<strong>${fechaFormateada}</strong> <span class="ms-2"><i class="bi bi-clock"></i> ${horaInicio}${horaFin ? ' - ' + horaFin : ''}</span>`;
+                                label.appendChild(input);
+                                label.appendChild(span);
+                                list.appendChild(label);
+                            });
+                        });
+                        container.innerHTML = '';
+                        container.appendChild(list);
+                    })
+                    .catch(() => {
+                        container.innerHTML = '<div class="alert alert-warning mb-0">No fue posible cargar los horarios. Reintenta o usa la página de reagendar.</div>';
+                    });
+            });
+        });
+    });
+</script>
+{% endblock %}

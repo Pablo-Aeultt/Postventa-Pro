@@ -1,0 +1,123 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Asignar Equipo - Escombros{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h3 mb-0" style="color: #1A4D4D;">
+                <i class="fas fa-users"></i> Asignación de Equipo para Retiro
+            </h1>
+            <p class="text-muted small mt-2">Selecciona técnicos para cada solicitud de retiro de escombros</p>
+        </div>
+    </div>
+
+    <!-- Tarjeta de información del supervisor -->
+    <div class="card border-start border-5 mb-4" style="border-start-color: #1A4D4D !important;">
+        <div class="card-body d-flex justify-content-between align-items-center">
+            <div>
+                <h6 class="card-title mb-1">
+                    <span class="badge" style="background-color: #1A4D4D;">SUPERVISOR</span>
+                </h6>
+                <p class="mb-0"><strong>{{ supervisor.usuario.first_name }} {{ supervisor.usuario.last_name }}</strong></p>
+                <small class="text-muted">{{ supervisor.proyecto.constructora.razon_social }}</small>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filtros -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <form method="GET" class="d-flex gap-2">
+                <div class="flex-grow-1">
+                    <label class="form-label small">Filtrar por estado de asignación:</label>
+                    <select name="estado_asignacion" class="form-select" onchange="this.form.submit()">
+                        <option value="">Todos</option>
+                        <option value="sin_asignar" {% if estado_asignacion == 'sin_asignar' %}selected{% endif %}>Sin Asignar</option>
+                        <option value="asignado" {% if estado_asignacion == 'asignado' %}selected{% endif %}>Asignados</option>
+                        <option value="completado" {% if estado_asignacion == 'completado' %}selected{% endif %}>Completados</option>
+                    </select>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Tabla de escombros -->
+    {% if escombros_pendientes %}
+        <div class="card">
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead style="background-color: #f8f9fa;">
+                        <tr>
+                            <th class="text-center">Escombro ID</th>
+                            <th>Reclamo</th>
+                            <th>Propietario</th>
+                            <th>Tipo</th>
+                            <th class="text-center">Volumen (m³)</th>
+                            <th class="text-center">Técnicos Asignados</th>
+                            <th class="text-center">Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for escombro in escombros_pendientes %}
+                            <tr>
+                                <td class="text-center">
+                                    <span class="badge bg-secondary">#{{ escombro.id_escombro }}</span>
+                                </td>
+                                <td>
+                                    <a href="{% url 'supervisor_detalle_reclamo' escombro.id_reclamo.id_reclamo %}" class="text-decoration-none">
+                                        Reclamo #{{ escombro.id_reclamo.id_reclamo }}
+                                    </a>
+                                </td>
+                                <td>{{ escombro.id_reclamo.propietario.nombre_completo }}</td>
+                                <td>
+                                    <small class="badge" style="background-color: #E8F4F8;">
+                                        {{ escombro.get_tipo_escombro_display }}
+                                    </small>
+                                </td>
+                                <td class="text-center">{{ escombro.volumen_m3 }}</td>
+                                <td class="text-center">
+                                    {% if escombro.asignaciones.all %}
+                                        <span class="badge bg-success">
+                                            {{ escombro.asignaciones.count }}
+                                        </span>
+                                    {% else %}
+                                        <span class="badge bg-warning">Sin asignar</span>
+                                    {% endif %}
+                                </td>
+                                <td class="text-center">
+                                    <a href="{% url 'supervisor_procesar_escombro' escombro.id_escombro %}" class="btn btn-sm btn-elegante">
+                                        <i class="fas fa-edit"></i> Procesar
+                                    </a>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    {% else %}
+        <div class="alert alert-info" role="alert">
+            <i class="fas fa-info-circle"></i> No hay solicitudes de escombros pendientes de asignación.
+        </div>
+    {% endif %}
+</div>
+
+<style>
+    .btn-elegante {
+        background: linear-gradient(135deg, #1A4D4D 0%, #2A6D6D 100%);
+        color: white;
+        border: none;
+        transition: all 0.3s ease;
+    }
+
+    .btn-elegante:hover {
+        background: linear-gradient(135deg, #0F3333 0%, #1A4D4D 100%);
+        color: white;
+        box-shadow: 0 4px 8px rgba(26, 77, 77, 0.3);
+    }
+</style>
+{% endblock %}

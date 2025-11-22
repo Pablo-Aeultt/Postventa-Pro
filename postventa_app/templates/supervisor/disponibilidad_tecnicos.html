@@ -1,0 +1,121 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Disponibilidad de Técnicos{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h3 mb-0" style="color: #1A4D4D;">
+                <i class="fas fa-calendar-check"></i> Disponibilidad de Técnicos
+            </h1>
+            <p class="text-muted small mt-2">Próximos 30 días ({{ fecha_inicio|date:"d/m/Y" }} - {{ fecha_fin|date:"d/m/Y" }})</p>
+        </div>
+    </div>
+
+    <!-- Tarjeta de información del supervisor -->
+    <div class="card border-start border-5 mb-4" style="border-start-color: #1A4D4D !important;">
+        <div class="card-body d-flex justify-content-between align-items-center">
+            <div>
+                <h6 class="card-title mb-1">
+                    <span class="badge" style="background-color: #1A4D4D;">SUPERVISOR</span>
+                </h6>
+                <p class="mb-0"><strong>{{ supervisor.usuario.first_name }} {{ supervisor.usuario.last_name }}</strong></p>
+                <small class="text-muted">{{ supervisor.proyecto.constructora.razon_social }}</small>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filtros -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <form method="GET" class="row g-3">
+                <div class="col-md-8">
+                    <label class="form-label small">Filtrar por técnico:</label>
+                    <select name="tecnico_id" class="form-select" onchange="this.form.submit()">
+                        <option value="">Todos los técnicos</option>
+                        {% for tecnico in tecnicos %}
+                            <option value="{{ tecnico.id_tecnico }}" {% if tecnico.id_tecnico|stringformat:"s" == tecnico_id %}selected{% endif %}>
+                                {{ tecnico.nombre }} - {{ tecnico.especialidad.nombre }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Tabla de disponibilidades -->
+    {% if disponibilidades %}
+        <div class="card">
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead style="background-color: #f8f9fa;">
+                        <tr>
+                            <th>Técnico</th>
+                            <th class="text-center">Especialidad</th>
+                            <th class="text-center">Fecha</th>
+                            <th class="text-center">Día</th>
+                            <th class="text-center">Hora Inicio</th>
+                            <th class="text-center">Hora Fin</th>
+                            <th class="text-center">Tipo</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for disp in disponibilidades %}
+                            <tr>
+                                <td><strong>{{ disp.id_tecnico.nombre }}</strong></td>
+                                <td class="text-center">
+                                    <span class="badge" style="background-color: #E8F4F8; color: #1A4D4D;">
+                                        {{ disp.id_tecnico.especialidad.nombre }}
+                                    </span>
+                                </td>
+                                <td class="text-center">{{ disp.fecha|date:"d/m/Y" }}</td>
+                                <td class="text-center">
+                                    <small>
+                                        {% if disp.es_recurrente %}
+                                            {{ disp.get_dia_semana_display_custom }}
+                                        {% else %}
+                                            {{ disp.fecha|date:"l" }}
+                                        {% endif %}
+                                    </small>
+                                </td>
+                                <td class="text-center"><strong>{{ disp.hora_inicio|time:"H:i" }}</strong></td>
+                                <td class="text-center"><strong>{{ disp.hora_fin|time:"H:i" }}</strong></td>
+                                <td class="text-center">
+                                    {% if disp.es_recurrente %}
+                                        <span class="badge bg-info">Recurrente</span>
+                                    {% else %}
+                                        <span class="badge bg-success">Puntual</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    {% else %}
+        <div class="alert alert-info" role="alert">
+            <i class="fas fa-info-circle"></i> No hay disponibilidades registradas para los próximos 30 días.
+        </div>
+    {% endif %}
+</div>
+
+<style>
+    .btn-elegante {
+        background: linear-gradient(135deg, #1A4D4D 0%, #2A6D6D 100%);
+        color: white;
+        border: none;
+        transition: all 0.3s ease;
+    }
+
+    .btn-elegante:hover {
+        background: linear-gradient(135deg, #0F3333 0%, #1A4D4D 100%);
+        color: white;
+        box-shadow: 0 4px 8px rgba(26, 77, 77, 0.3);
+    }
+</style>
+{% endblock %}

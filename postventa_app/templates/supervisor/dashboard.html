@@ -1,0 +1,411 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Dashboard Supervisor - Postventa Pro{% endblock %}
+
+{% block extra_css %}
+<style>
+:root { --color-primary:#1A4D4D; --color-secondary:#2A6D6D; }
+.kpi-card { border-left-width:4px !important; border-left-style:solid !important; box-shadow:0 2px 8px rgba(0,0,0,0.06); }
+.kpi-label { font-size:.9rem; font-weight:600; opacity:.9; }
+.kpi-value { font-size:2rem; font-weight:700; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <!-- Encabezado Principal con información del Supervisor -->
+    <div class="row mb-4">
+        <div class="col">
+            <h4 class="mb-0"><i class="fas fa-user-tie"></i> Panel Supervisor</h4>
+            <span class="text-muted">Bienvenido(a) <strong>{% if supervisor.user.first_name or supervisor.user.last_name %}{{ supervisor.user.first_name }} {{ supervisor.user.last_name }}{% else %}{{ supervisor.user.username }}{% endif %}</strong></span><br>
+            <span class="text-muted"><strong>{{ proyecto.nombre }}</strong></span><br>
+            <span class="text-muted">RUT: <strong>{{ supervisor.rut }}</strong> | Rol: <strong>{{ supervisor.get_rol_display }}</strong> | Teléfono: <strong>{% if supervisor.telefono %}{{ supervisor.telefono }}{% else %}No disponible{% endif %}</strong> | Correo: <strong>{{ supervisor.user.email }}</strong></span><br>
+            {% if proyecto.constructora %}<span class="text-muted">Constructora: <strong>{{ proyecto.constructora.razon_social }}</strong></span>{% endif %}
+        </div>
+    </div>
+
+    <!-- Fila 1: KPIs Principales -->
+    <div class="row mb-4">
+        <!-- Reclamos Abiertos -->
+        <div class="col-lg-3 col-md-6 mb-3">
+            <div class="card border-0 shadow-sm h-100" style="background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%); position: relative; overflow: hidden;">
+                <div style="position: absolute; top: 0; left: 0; right: 0; height: 4px; background: linear-gradient(90deg, #FF6B6B 0%, rgba(255,107,107,0.5) 100%);"></div>
+                <div class="card-body pt-4">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <p class="text-muted small mb-2">RECLAMOS ABIERTOS</p>
+                            <h2 class="mb-1" style="color: #0d6efd; font-weight: 700;">{{ reclamos_abiertos }}</h2>
+                            <small class="text-muted">Requieren atención</small>
+                        </div>
+                        <i class="fas fa-exclamation-circle fa-2x" style="color: #FF6B6B; opacity: 0.25;"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Reclamos Resueltos -->
+        <div class="col-lg-3 col-md-6 mb-3">
+            <div class="card border-0 shadow-sm h-100" style="background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%); position: relative; overflow: hidden;">
+                <div style="position: absolute; top: 0; left: 0; right: 0; height: 4px; background: linear-gradient(90deg, #51CF66 0%, rgba(81,207,102,0.5) 100%);"></div>
+                <div class="card-body pt-4">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <p class="text-muted small mb-2">RECLAMOS RESUELTOS</p>
+                            <h2 class="mb-1" style="color: #0d6efd; font-weight: 700;">{{ reclamos_resueltos }}</h2>
+                            <small class="text-muted">De {{ reclamos_total }} total</small>
+                        </div>
+                        <i class="fas fa-check-circle fa-2x" style="color: #51CF66; opacity: 0.25;"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Con Retraso -->
+        <div class="col-lg-3 col-md-6 mb-3">
+            <div class="card border-0 shadow-sm h-100" style="background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%); position: relative; overflow: hidden;">
+                <div style="position: absolute; top: 0; left: 0; right: 0; height: 4px; background: linear-gradient(90deg, #FFA94D 0%, rgba(255,169,77,0.5) 100%);"></div>
+                <div class="card-body pt-4">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <p class="text-muted small mb-2">CON RETRASO (>7 DÍAS)</p>
+                            <h2 class="mb-1" style="color: #0d6efd; font-weight: 700;">{{ reclamos_retraso }}</h2>
+                            <small class="text-muted">Acción prioritaria</small>
+                        </div>
+                        <i class="fas fa-exclamation-triangle fa-2x" style="color: #FFA94D; opacity: 0.25;"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Satisfacción -->
+        <div class="col-lg-3 col-md-6 mb-3">
+            <div class="card border-0 shadow-sm h-100" style="background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%); position: relative; overflow: hidden;">
+                <div style="position: absolute; top: 0; left: 0; right: 0; height: 4px; background: linear-gradient(90deg, #4ECDC4 0%, rgba(78,205,196,0.5) 100%);"></div>
+                <div class="card-body pt-4">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <p class="text-muted small mb-2">SATISFACCIÓN PROMEDIO</p>
+                            <h2 class="mb-1" style="color: #0d6efd; font-weight: 700;">{{ promedio_satisfaccion }}<small style="font-size: 0.6em;">/5</small></h2>
+                            <small class="text-muted">{{ encuestas_completadas }} encuestas</small>
+                        </div>
+                        <i class="fas fa-star fa-2x" style="color: #4ECDC4; opacity: 0.25;"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Fila 2: Eficiencia Operativa y Navegación -->
+    <div class="row mb-4">
+        <!-- Gráfico: Distribución de Reclamos por Estado -->
+        <div class="col-lg-6 mb-4">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body">
+                    <h5 class="mb-3" style="color: #1A4D4D; font-weight: 600;">
+                        <i class="fas fa-chart-pie"></i> Distribución de Reclamos ({{ mes_actual }})
+                    </h5>
+                    <canvas id="chartDistribucion" style="max-height: 300px;"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Gráfico: Tendencia Semanal -->
+        <div class="col-lg-6 mb-4">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body">
+                    <h5 class="mb-3" style="color: #1A4D4D; font-weight: 600;">
+                        <i class="fas fa-chart-line"></i> Reclamos por Día ({{ mes_actual }})
+                    </h5>
+                    <canvas id="chartTendencia" style="max-height: 300px;"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Fila 2.5: Gráfico Reclamos por Especialidad -->
+    <div class="row mb-4">
+        <div class="col-lg-8 mb-4">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body">
+                    <h5 class="mb-3" style="color: #1A4D4D; font-weight: 600;">
+                        <i class="fas fa-wrench"></i> Reclamos por Especialidad ({{ mes_actual }})
+                    </h5>
+                    <canvas id="chartEspecialidad" style="max-height: 350px;"></canvas>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Resumen por Especialidad (Tabla) -->
+        <div class="col-lg-4 mb-4">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body">
+                    <h5 class="mb-3" style="color: #1A4D4D; font-weight: 600;">
+                        <i class="fas fa-list"></i> Distribución Especialidades
+                    </h5>
+                    <div style="max-height: 350px; overflow-y: auto;">
+                        {% for label, valor in especialidades_datos %}
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <small class="text-truncate" style="flex-grow: 1;">{{ label }}</small>
+                            <span class="badge" style="background-color: #1A4D4D;">{{ valor }}</span>
+                        </div>
+                        {% empty %}
+                        <p class="text-muted text-center">Sin reclamos por especialidad</p>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Fila 3: Eficiencia Operativa y Navegación (anterior) -->
+    <div class="row mb-4">
+        <!-- Tasa de Resolución -->
+        <div class="col-lg-8">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body">
+                    <h5 class="mb-3" style="color: #1A4D4D; font-weight: 600;">
+                        <i class="fas fa-chart-line"></i> Eficiencia Operativa
+                    </h5>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <p class="text-muted mb-2">Tasa de Resolución</p>
+                            <div class="progress mb-3" style="height: 25px;">
+                                <div class="progress-bar" role="progressbar" style="width: {{ tasa_resolucion }}%; background: linear-gradient(90deg, #1A4D4D 0%, #0d6efd 100%); font-weight: 600; color: white;" aria-valuenow="{{ tasa_resolucion }}" aria-valuemin="0" aria-valuemax="100">
+                                    {% if reclamos_total > 0 %}{{ tasa_resolucion }}%{% else %}N/A{% endif %}
+                                </div>
+                            </div>
+                            <small class="text-muted">{{ reclamos_resueltos }}/{{ reclamos_total }} reclamos resueltos</small>
+                        </div>
+                        <div class="col-md-6">
+                            <p class="text-muted mb-2">Estado del Sistema</p>
+                            <div class="alert alert-success border-0 mb-0">
+                                <i class="fas fa-check-circle"></i> <strong>Operativo</strong>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Accesos Rápidos - Módulos Principales -->
+        <div class="col-lg-4">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body">
+                    <h5 class="mb-3" style="color: #1A4D4D; font-weight: 600;">
+                        <i class="fas fa-lightning-bolt"></i> Acceso Rápido
+                    </h5>
+                    <div class="d-grid gap-2">
+                        <a href="{% url 'supervisor_reclamos' %}" class="btn btn-sm" style="background-color: #1A4D4D; color: white; border: none;">
+                            <i class="fas fa-list-check"></i> Reclamos
+                        </a>
+                        <a href="{% url 'dashboard_kpis' %}" class="btn btn-sm" style="background-color: #0d6efd; color: white; border: none;">
+                            <i class="fas fa-chart-bar"></i> KPIs y Métricas
+                        </a>
+                        <a href="{% url 'supervisor_validar_escombros' %}" class="btn btn-sm btn-outline-secondary">
+                            <i class="fas fa-trash"></i> Escombros
+                        </a>
+                        <a href="{% url 'supervisor_control_materiales' %}" class="btn btn-sm btn-outline-secondary">
+                            <i class="fas fa-cube"></i> Materiales
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Fila 3: Filtros Rápidos por Estado -->
+    <div class="row">
+        <div class="col-md-12">
+            <h5 class="mb-3" style="color: #1A4D4D; font-weight: 600;">
+                <i class="fas fa-filter"></i> Reclamos por Estado
+            </h5>
+            <div class="d-flex gap-2 flex-wrap">
+                <a href="{% url 'supervisor_reclamos' %}" class="btn btn-sm btn-outline-primary">
+                    <i class="fas fa-inbox"></i> Todos
+                </a>
+                <a href="{% url 'supervisor_reclamos' %}?estado=ingresado" class="btn btn-sm btn-outline-warning">
+                    <i class="fas fa-file-import"></i> Ingresados
+                </a>
+                <a href="{% url 'supervisor_reclamos' %}?estado=en_proceso" class="btn btn-sm btn-outline-info">
+                    <i class="fas fa-hourglass-half"></i> En Proceso
+                </a>
+                <a href="{% url 'supervisor_reclamos' %}?estado=resuelto" class="btn btn-sm btn-outline-success">
+                    <i class="fas fa-check-circle"></i> Resueltos
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .card {
+        border-radius: 0.75rem;
+        transition: transform 0.3s, box-shadow 0.3s;
+    }
+
+    .card:hover {
+        transform: translateY(-4px);
+        box-shadow: 0 8px 16px rgba(26, 77, 77, 0.1) !important;
+    }
+
+    .shadow-md {
+        box-shadow: 0 6px 12px rgba(26, 77, 77, 0.12) !important;
+    }
+
+    h2 {
+        font-size: 2rem;
+    }
+
+    .progress {
+        background-color: #e9ecef;
+        border-radius: 0.5rem;
+    }
+</style>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Definir paleta de colores consistente
+    const colors = {
+        primary: '#1A4D4D',
+        secondary: '#2A6D6D',
+        success: '#51CF66',
+        danger: '#FF6B6B',
+        warning: '#FFA94D',
+        info: '#4ECDC4',
+        light: '#E9ECEF',
+    };
+
+    // Gráfico: Distribución de Reclamos por Estado
+    const ctxDistribucion = document.getElementById('chartDistribucion');
+    if (ctxDistribucion) {
+        new Chart(ctxDistribucion, {
+            type: 'doughnut',
+            data: {
+                labels: ['Abiertos', 'Resueltos', 'Cancelados'],
+                datasets: [{
+                    data: [
+                        {{ reclamos_ingresados }},
+                        {{ reclamos_resueltos_graf }},
+                        {{ reclamos_cancelados }}
+                    ],
+                    backgroundColor: [
+                        '#FFA94D',  // Naranja - Abiertos
+                        '#51CF66',  // Verde - Resueltos
+                        '#868E96'   // Gris - Cancelados
+                    ],
+                    borderColor: '#fff',
+                    borderWidth: 2,
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: true,
+                plugins: {
+                    legend: {
+                        position: 'bottom',
+                        labels: {
+                            usePointStyle: true,
+                            padding: 15,
+                            font: { size: 12, weight: '500' }
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    // Gráfico: Tendencia Semanal
+    const ctxTendencia = document.getElementById('chartTendencia');
+    if (ctxTendencia) {
+        new Chart(ctxTendencia, {
+            type: 'line',
+            data: {
+                labels: {{ labels_tendencia|safe }},
+                datasets: [{
+                    label: 'Reclamos Ingresados',
+                    data: {{ valores_tendencia|safe }},
+                    borderColor: colors.primary,
+                    backgroundColor: 'rgba(26, 77, 77, 0.05)',
+                    borderWidth: 3,
+                    fill: true,
+                    tension: 0.4,
+                    pointRadius: 5,
+                    pointBackgroundColor: colors.primary,
+                    pointBorderColor: '#fff',
+                    pointBorderWidth: 2,
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: true,
+                plugins: {
+                    legend: {
+                        display: true,
+                        labels: {
+                            usePointStyle: true,
+                            padding: 15,
+                            font: { size: 12, weight: '500' }
+                        }
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        ticks: { stepSize: 1 }
+                    }
+                }
+            }
+        });
+    }
+
+    // Gráfico: Reclamos por Especialidad
+    const ctxEspecialidad = document.getElementById('chartEspecialidad');
+    if (ctxEspecialidad) {
+        const especialidades = {{ labels_especialidad|safe }};
+        const cantidades = {{ valores_especialidad|safe }};
+        
+        // Colores en tonos de azul
+        const coloresEspecialidad = [
+            '#0d6efd', '#0b5ed7', '#0a58ca', '#0d6efd', '#087bea',
+            '#0dcaf0', '#0b7dda', '#0056b3', '#004085', '#00376b',
+            '#0a5ec7', '#0069d9'
+        ];
+
+        new Chart(ctxEspecialidad, {
+            type: 'bar',
+            data: {
+                labels: especialidades,
+                datasets: [{
+                    label: 'Cantidad de Reclamos',
+                    data: cantidades,
+                    backgroundColor: coloresEspecialidad.slice(0, especialidades.length),
+                    borderRadius: 3,
+                    borderSkipped: false,
+                    barThickness: 50,
+                }]
+            },
+            options: {
+                indexAxis: 'x',  // Barras verticales (normal)
+                responsive: true,
+                maintainAspectRatio: true,
+                plugins: {
+                    legend: {
+                        display: false
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        ticks: { stepSize: 1 }
+                    }
+                }
+            }
+        });
+    }
+</script>
+{% endblock %}

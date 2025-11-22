@@ -1,0 +1,134 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Validación de Escombros - Postventa Pro{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <!-- Encabezado -->
+    <div class="row mb-4">
+        <div class="col">
+            <h4 class="mb-0"><i class="fas fa-trash"></i> Validación de Retiro de Escombros</h4>
+            <p class="text-muted mb-2">Proyecto: <strong>{{ proyecto.nombre }}</strong></p>
+            <p class="text-muted">Revisa y aprueba solicitudes de retiro de escombros</p>
+        </div>
+    </div>
+
+    <!-- Filtros -->
+    <div class="card mb-4">
+        <div class="card-header bg-light">
+            <h5 class="mb-0">Filtros</h5>
+        </div>
+        <div class="card-body">
+            <form method="get" class="row g-3">
+                <!-- Estado -->
+                <div class="col-md-4">
+                    <label class="form-label">Estado</label>
+                    <select name="estado" class="form-select">
+                        <option value="">Todos</option>
+                        {% for value, label in estados %}
+                            <option value="{{ value }}" {% if request.GET.estado == value %}selected{% endif %}>
+                                {{ label }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <!-- Botones -->
+                <div class="col-md-8">
+                    <label class="form-label">&nbsp;</label>
+                    <div>
+                        <button type="submit" class="btn btn-elegante">
+                            <i class="fas fa-search"></i> Filtrar
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Tabla de Solicitudes de Escombros -->
+    <div class="card">
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>Reclamo</th>
+                        <th>Propietario</th>
+                        <th>Tipo</th>
+                        <th>Volumen (m³)</th>
+                        <th>Estado</th>
+                        <th>Ubicación</th>
+                        <th>Acciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for escombro in solicitudes_escombros %}
+                        <tr>
+                            <td>
+                                <strong>#{{ escombro.id_reclamo.numero_folio }}</strong>
+                            </td>
+                            <td>
+                                {% if escombro.id_reclamo.propietario %}
+                                    {{ escombro.id_reclamo.propietario.nombre }}
+                                {% else %}
+                                    <span class="text-muted">Sin asignar</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <span class="badge bg-secondary">
+                                    {{ escombro.get_tipo_escombro_display }}
+                                </span>
+                            </td>
+                            <td>{{ escombro.volumen_m3 }}</td>
+                            <td>
+                                <span class="badge bg-{% if escombro.estado == 'pendiente' %}warning{% elif escombro.estado == 'programado' %}info{% elif escombro.estado == 'completado' %}success{% elif escombro.estado == 'cancelado' %}dark{% endif %}">
+                                    {{ escombro.get_estado_display }}
+                                </span>
+                            </td>
+                            <td>
+                                <small class="text-muted">{{ escombro.ubicacion_exacta|truncatewords:5 }}</small>
+                            </td>
+                            <td>
+                                {% if escombro.estado in 'pendiente,programado' %}
+                                    <a href="{% url 'supervisor_procesar_escombro' escombro.id_escombro %}" class="btn btn-sm btn-elegante">
+                                        <i class="fas fa-check"></i> Ver Detalle
+                                    </a>
+                                {% else %}
+                                    <span class="text-muted">-</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                    {% empty %}
+                        <tr>
+                            <td colspan="7" class="text-center text-muted py-4">
+                                No hay solicitudes de escombros para validar
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Botón volver -->
+    <div class="row mt-4">
+        <div class="col-md-12">
+            <a href="{% url 'dashboard_supervisor' %}" class="btn btn-elegante">
+                <i class="fas fa-arrow-left"></i> Volver al Dashboard
+            </a>
+        </div>
+    </div>
+</div>
+
+<style>
+.table-hover tbody tr:hover {
+    background-color: rgba(0, 0, 0, 0.02);
+}
+
+.badge {
+    font-size: 0.85rem;
+    padding: 0.4rem 0.6rem;
+}
+</style>
+{% endblock %}

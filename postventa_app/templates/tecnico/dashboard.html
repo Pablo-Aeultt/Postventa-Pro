@@ -1,0 +1,111 @@
+{% extends 'base.html' %}
+{% block title %}Panel Técnico - Postventa Pro{% endblock %}
+
+{% block extra_css %}
+<style>
+:root { --color-primary:#1A4D4D; --color-secondary:#2A6D6D; }
+.card-custom { background:#fff; border-radius:18px; box-shadow:0 4px 14px rgba(0,0,0,0.08); border-left:4px solid var(--color-primary); overflow:hidden; }
+.card-header-custom { background:linear-gradient(135deg,var(--color-primary),var(--color-secondary)); color:#fff; padding:12px 18px; font-weight:600; display:flex; align-items:center; gap:8px; }
+.kpi-card { border-left-width:4px !important; border-left-style:solid !important; box-shadow:0 2px 8px rgba(0,0,0,0.06); }
+.kpi-label { font-size:.9rem; font-weight:600; opacity:.9; }
+.kpi-value { font-size:2rem; font-weight:700; }
+.btn-outline-primary { border: 2px solid var(--color-primary); color: var(--color-primary); font-weight: 600; border-radius: 10px; transition: all 0.3s ease; }
+.btn-outline-primary:hover { background: var(--color-primary); color: white; transform: translateY(-2px); box-shadow: 0 4px 12px rgba(26,77,77,0.2); }
+
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+  <div class="row mb-3">
+    <div class="col">
+      <h4 class="mb-0"><i class="bi bi-wrench-adjustable"></i> Panel Técnico</h4>
+    <span class="text-muted">Bienvenido <strong>{{ tecnico.nombre }} - Técnico Especialista {{ tecnico.especialidad }}</strong></span><br>
+    <span class="text-muted"><strong>{{ tecnico.constructora.razon_social }}</strong></span><br>
+
+    <span class="text-muted">RUT: <strong>{{ tecnico.rut }}</strong> | Correo: <strong>{{ tecnico.email }}</strong> | Teléfono: <strong>{{ tecnico.telefono }}</strong></span><br>
+    
+    </div>
+    <div class="col-auto">
+      <a href="{% url 'tecnico_historial_citas' %}" class="btn btn-outline-primary"><i class="bi bi-clock-history"></i> Historial de Citas</a>
+      <a href="{% url 'disponibilidad_tecnico' %}" class="btn btn-outline-primary"><i class="bi bi-calendar-check"></i> Mi Disponibilidad</a>
+        <a href="{% url 'tecnico_historial_escombros' %}" class="btn btn-outline-primary"><i class="bi bi-trash"></i> Gestión de Escombros</a>
+
+    </div>
+  </div>
+
+  <div class="row g-3">
+    {% for label, color, value in kpi_cards %}
+    <div class="col-6 col-md-4 col-lg-2">
+      <div class="card kpi-card text-center h-100" style="border-left-color: var(--color-primary);">
+        <div class="card-body py-3">
+          <div class="kpi-label text-{{ color }}">{{ label }}</div>
+          <div class="kpi-value">{{ value }}</div>
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+
+  <div class="card-custom mt-4">
+    <div class="card-header-custom"><i class="bi bi-clock"></i> Próximas citas</div>
+    <div class="card-body p-0">
+      <div class="table-responsive">
+        <table class="table table-sm mb-0 align-middle">
+          <thead>
+            <tr>
+              <th>Fecha</th>
+              <th>Hora</th>
+              <th>Propietario</th>
+              <th>Proyecto</th>
+              <th>Estado</th>
+              <th>Reclamo</th>
+            </tr>
+          </thead>
+          <tbody>
+          {% if proximas_citas %}
+            {% for c in proximas_citas %}
+            <tr>
+              <td>{{ c.fecha_programada|date:'d/m/Y' }}</td>
+              <td>{{ c.fecha_programada|time:'H:i' }}</td>
+              <td>{{ c.id_cliente.nombre }}</td>
+              <td>{{ c.id_reclamo.proyecto.nombre }}</td>
+              <td>
+                {% if c.id_reclamo.estado == 'resuelto' %}
+                  <span class="badge" style="background: #d1e7dd; color: #0f5132; font-size: 0.9rem; padding: 6px 12px; font-weight: 600;">
+                    ✓ Resuelto
+                  </span>
+                {% elif c.get_estado_display == 'Pendiente' %}
+                  <span class="badge" style="background: #fff3cd; color: #856404; font-size: 0.9rem; padding: 6px 12px; font-weight: 600;">{{ c.get_estado_display }}</span>
+                {% elif c.get_estado_display == 'Confirmada' %}
+                  <span class="badge" style="background: #cfe2ff; color: #084298; font-size: 0.9rem; padding: 6px 12px; font-weight: 600;">{{ c.get_estado_display }}</span>
+                {% elif c.get_estado_display == 'En curso' %}
+                  <span class="badge" style="background: #d1ecf1; color: #0c5460; font-size: 0.9rem; padding: 6px 12px; font-weight: 600;">{{ c.get_estado_display }}</span>
+                {% elif c.get_estado_display == 'Completada' %}
+                  <span class="badge" style="background: #d1e7dd; color: #0f5132; font-size: 0.9rem; padding: 6px 12px; font-weight: 600;">{{ c.get_estado_display }}</span>
+                {% else %}
+                  <span class="badge bg-light text-dark" style="font-size: 0.9rem; padding: 6px 12px; font-weight: 600;">{{ c.get_estado_display }}</span>
+                {% endif %}
+              </td>
+              <td>
+                <a href="{% url 'tecnico_detalle_reclamo' c.id_reclamo.id_reclamo %}" class="btn btn-sm btn-outline-primary">
+                  <i class="bi bi-link-45deg"></i> {{ c.id_reclamo.numero_folio }}
+                </a>
+                {% if c.estado == 'completada' and c.id_reclamo.estado != 'resuelto' and c.id_reclamo.estado != 'cerrado' and c.id_reclamo.estado != 'cancelado' %}
+                  <a href="{% url 'tecnico_marcar_reclamo_resuelto' c.id_reclamo.id_reclamo %}" class="btn btn-sm btn-success ms-2">
+                    <i class="bi bi-check2-circle"></i> Marcar como resuelto
+                  </a>
+                {% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          {% else %}
+            <tr><td colspan="6" class="text-center text-muted py-4">No hay citas próximas</td></tr>
+          {% endif %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

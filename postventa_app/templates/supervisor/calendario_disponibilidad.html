@@ -1,0 +1,191 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Calendario de Disponibilidad{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h3 mb-0" style="color: #1A4D4D;">
+                <i class="fas fa-calendar-alt"></i> Calendario de Disponibilidad
+            </h1>
+            <p class="text-muted small mt-2">Próximos 60 días ({{ fecha_inicio|date:"d/m/Y" }} - {{ fecha_fin|date:"d/m/Y" }})</p>
+        </div>
+        <a href="{% url 'supervisor_disponibilidad_tecnicos' %}" class="btn btn-outline-secondary">
+            <i class="fas fa-list"></i> Ver Lista
+        </a>
+    </div>
+
+    <!-- Tarjeta de información del supervisor -->
+    <div class="card border-start border-5 mb-4" style="border-start-color: #1A4D4D !important;">
+        <div class="card-body d-flex justify-content-between align-items-center">
+            <div>
+                <h6 class="card-title mb-1">
+                    <span class="badge" style="background-color: #1A4D4D;">SUPERVISOR</span>
+                </h6>
+                <p class="mb-0"><strong>{{ supervisor.usuario.first_name }} {{ supervisor.usuario.last_name }}</strong></p>
+                <small class="text-muted">{{ supervisor.proyecto.constructora.razon_social }}</small>
+            </div>
+        </div>
+    </div>
+
+    <!-- Leyenda -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <h6 style="color: #1A4D4D;" class="mb-3">Leyenda:</h6>
+            <div class="row">
+                <div class="col-md-3">
+                    <span class="badge bg-success p-2"><i class="fas fa-check"></i> Disponible</span>
+                </div>
+                <div class="col-md-3">
+                    <span class="badge bg-warning text-dark p-2"><i class="fas fa-briefcase"></i> Asignado</span>
+                </div>
+                <div class="col-md-3">
+                    <span class="badge bg-danger p-2"><i class="fas fa-times"></i> No disponible</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tabla de calendario por técnico -->
+    {% if tecnicos %}
+        {% for tecnico in tecnicos %}
+            <div class="card mb-4">
+                <div class="card-header" style="background-color: #E8F4F8; border-bottom: 2px solid #1A4D4D;">
+                    <div class="row align-items-center">
+                        <div class="col-md-6">
+                            <h6 class="mb-0" style="color: #1A4D4D;">
+                                <i class="fas fa-user-tie"></i> {{ tecnico.nombre }}
+                            </h6>
+                        </div>
+                        <div class="col-md-6 text-end">
+                            <small class="text-muted">
+                                <strong>Especialidad:</strong> {{ tecnico.especialidad.nombre }} | 
+                                <strong>RUT:</strong> {{ tecnico.rut }}
+                            </small>
+                        </div>
+                    </div>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-sm table-bordered mb-0">
+                        <thead style="background-color: #f8f9fa;">
+                            <tr>
+                                <th class="text-center" style="width: 100px;">Fecha</th>
+                                <th class="text-center" style="width: 80px;">Día</th>
+                                <th class="text-center">Disponibilidad</th>
+                                <th class="text-center">Asignaciones</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for tecnico_disp in disponibilidades %}
+                                {% if tecnico_disp.id_tecnico.id_tecnico == tecnico.id_tecnico %}
+                                    <tr>
+                                        <td class="text-center">
+                                            <strong>{{ tecnico_disp.fecha|date:"d/m" }}</strong>
+                                        </td>
+                                        <td class="text-center">
+                                            <small>
+                                                {% if tecnico_disp.es_recurrente %}
+                                                    {{ tecnico_disp.get_dia_semana_display_custom }}
+                                                {% else %}
+                                                    {{ tecnico_disp.fecha|date:"l"|truncatewords:1 }}
+                                                {% endif %}
+                                            </small>
+                                        </td>
+                                        <td class="text-center">
+                                            <div class="badge bg-success p-2">
+                                                {{ tecnico_disp.hora_inicio|time:"H:i" }} - {{ tecnico_disp.hora_fin|time:"H:i" }}
+                                            </div>
+                                            {% if tecnico_disp.es_recurrente %}
+                                                <br>
+                                                <small class="text-muted">(Recurrente)</small>
+                                            {% endif %}
+                                        </td>
+                                        <td class="text-center">
+                                            {% with asignaciones=asignaciones_escombros|dictsort:"id_tecnico_id" %}
+                                                <span class="badge bg-secondary">-</span>
+                                            {% endwith %}
+                                        </td>
+                                    </tr>
+                                {% endif %}
+                            {% empty %}
+                                <tr>
+                                    <td colspan="4" class="text-center text-muted py-3">
+                                        <small>Sin disponibilidad registrada en este período</small>
+                                    </td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        {% endfor %}
+    {% else %}
+        <div class="alert alert-info" role="alert">
+            <i class="fas fa-info-circle"></i> No hay técnicos disponibles en tu proyecto.
+        </div>
+    {% endif %}
+
+    <!-- Resumen de asignaciones -->
+    {% if asignaciones_escombros or citas %}
+        <div class="card">
+            <div class="card-header" style="background-color: #1A4D4D; color: white;">
+                <h6 class="mb-0">Asignaciones y Citas Pendientes</h6>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    {% if asignaciones_escombros %}
+                        <div class="col-md-6">
+                            <h6 class="mb-3" style="color: #1A4D4D;">Escombros Asignados ({{ asignaciones_escombros.count }})</h6>
+                            <div class="list-group list-group-sm">
+                                {% for asignacion in asignaciones_escombros|slice:":5" %}
+                                    <a href="#" class="list-group-item list-group-item-action">
+                                        <div class="d-flex w-100 justify-content-between">
+                                            <strong>{{ asignacion.id_tecnico.nombre }}</strong>
+                                            <small>{{ asignacion.fecha_asignacion|date:"d/m/Y" }}</small>
+                                        </div>
+                                        <small class="text-muted">Escombro #{{ asignacion.id_escombro.id_escombro }}</small>
+                                    </a>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    {% endif %}
+                    {% if citas %}
+                        <div class="col-md-6">
+                            <h6 class="mb-3" style="color: #1A4D4D;">Citas Confirmadas ({{ citas.count }})</h6>
+                            <div class="list-group list-group-sm">
+                                {% for cita in citas|slice:":5" %}
+                                    <a href="#" class="list-group-item list-group-item-action">
+                                        <div class="d-flex w-100 justify-content-between">
+                                            <strong>{{ cita.id_tecnico.nombre }}</strong>
+                                            <small>{{ cita.fecha_cita|date:"d/m/Y" }}</small>
+                                        </div>
+                                        <small class="text-muted">Cita #{{ cita.id_cita }}</small>
+                                    </a>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    {% endif %}
+</div>
+
+<style>
+    .btn-elegante {
+        background: linear-gradient(135deg, #1A4D4D 0%, #2A6D6D 100%);
+        color: white;
+        border: none;
+        transition: all 0.3s ease;
+    }
+
+    .btn-elegante:hover {
+        background: linear-gradient(135deg, #0F3333 0%, #1A4D4D 100%);
+        color: white;
+        box-shadow: 0 4px 8px rgba(26, 77, 77, 0.3);
+    }
+</style>
+{% endblock %}

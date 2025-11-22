@@ -1,0 +1,1170 @@
+from django.db import models
+from django.contrib.auth.models import User
+from django.core.validators import MinValueValidator, MaxValueValidator
+from django.utils import timezone
+from django.core.exceptions import ValidationError
+import re
+
+
+def validate_rut(value: str):
+    """Validación básica de RUT chileno.
+    - Permite números, puntos, guion y K/k.
+    - No valida dígito verificador matemáticamente (se normaliza en importación).
+    """
+    if value is None:
+        return
+    s = str(value).strip()
+    if not s:
+        return
+    if not re.match(r"^[0-9.\-kK]+$", s):
+        raise ValidationError("RUT inválido: use números, puntos y guion (ej: 12.345.678-9)")
+
+
+# ========================================
+# MODELO 1: CONSTRUCTORA (CLIENTE PRINCIPAL)
+# ========================================
+class Constructora(models.Model):
+    """
+    Empresa constructora responsable legal de proyectos inmobiliarios.
+    Cliente principal del servicio de postventa.
+    Una constructora puede tener múltiples proyectos y es responsable de las garantías legales.
+    """
+    ESTADO_CONSTRUCTORA = [
+        ('activo', 'Activo'),
+        ('suspendido', 'Suspendido'),
+        ('inactivo', 'Inactivo'),
+    ]
+    
+    PLAN_CONTRATADO = [
+        ('basico', 'Básico'),
+        ('profesional', 'Profesional'),
+        ('corporativo', 'Corporativo'),
+    ]
+    
+    # Identificación
+    rut = models.CharField(max_length=12, unique=True, verbose_name="RUT Empresa")
+    razon_social = models.CharField(max_length=200, verbose_name="Razón Social")
+    nombre_comercial = models.CharField(max_length=150, blank=True, null=True, verbose_name="Nombre Comercial")
+    
+    # Contacto
+    email_principal = models.EmailField(verbose_name="Email Principal")
+    telefono = models.CharField(max_length=30, verbose_name="Teléfono")
+    direccion = models.CharField(max_length=250, verbose_name="Dirección")
+    sitio_web = models.URLField(blank=True, null=True, verbose_name="Sitio Web")
+    
+    # Contacto ejecutivo
+    nombre_ejecutivo = models.CharField(max_length=150, blank=True, null=True, verbose_name="Nombre Ejecutivo de Cuenta")
+    email_ejecutivo = models.EmailField(blank=True, null=True, verbose_name="Email Ejecutivo")
+    telefono_ejecutivo = models.CharField(max_length=30, blank=True, null=True, verbose_name="Teléfono Ejecutivo")
+    
+    # Contrato
+    plan = models.CharField(max_length=15, choices=PLAN_CONTRATADO, default='basico', verbose_name="Plan Contratado")
+    fecha_inicio_contrato = models.DateField(verbose_name="Inicio de Contrato")
+    fecha_fin_contrato = models.DateField(blank=True, null=True, verbose_name="Fin de Contrato")
+    estado = models.CharField(max_length=12, choices=ESTADO_CONSTRUCTORA, default='activo', verbose_name="Estado")
+    
+    # Control
+    fecha_registro = models.DateTimeField(auto_now_add=True, verbose_name="Fecha de Registro")
+    notas = models.TextField(blank=True, null=True, verbose_name="Notas")
+
+    class Meta:
+        verbose_name = "Constructora"
+        verbose_name_plural = "Constructoras"
+        ordering = ['razon_social']
+
+    def __str__(self):
+        return f"{self.razon_social} ({self.rut})"
+    
+    def proyectos_activos(self):
+        """Retorna cantidad de proyectos activos"""
+        return self.proyectos.filter(estado__in=['construccion', 'entregado', 'garantia']).count()
+
+
+# ========================================
+# MODELO 2: PROPIETARIO (COMPLETO)
+# ========================================
+class Propietario(models.Model):
+    """
+    Representa al propietario de una unidad que realiza reclamos postventa.
+    Es el usuario final del sistema.
+    """
+    TIPO_PROPIETARIO = [
+        ('natural', 'Persona Natural'),
+        ('juridica', 'Persona Jurídica'),
+    ]
+    
+    ESTADO_PROPIETARIO = [
+        ('activo', 'Activo'),
+        ('inactivo', 'Inactivo'),
+    ]
+    
+    # Vinculación con cuenta de usuario
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='propietarios',
+        verbose_name="Usuario del sistema",
+        null=True,
+        blank=True
+    )
+    
+    # Información básica
+    nombre = models.CharField(max_length=120, verbose_name="Nombre completo")
+    rut = models.CharField(max_length=12, verbose_name="RUT/DNI")
+    tipo_propietario = models.CharField(max_length=10, choices=TIPO_PROPIETARIO, default='natural', verbose_name="Tipo de propietario")
+    
+    # Contacto
+    email = models.EmailField(verbose_name="Correo electrónico")
+    telefono = models.CharField(max_length=30, verbose_name="Teléfono")
+    telefono_alternativo = models.CharField(max_length=30, blank=True, null=True, verbose_name="Teléfono alternativo")
+    direccion = models.CharField(max_length=200, verbose_name="Dirección")
+    
+    # Propiedad/Vivienda
+    proyecto = models.ForeignKey(
+        'Proyecto',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='propietarios',
+        verbose_name="Proyecto de vivienda"
+    )
+    unidad = models.CharField(
+        max_length=100,
+        blank=True,
+        null=True,
+        verbose_name="Unidad/Departamento"
+    )
+    fecha_compra = models.DateField(
+        blank=True,
+        null=True,
+        verbose_name="Fecha de compra"
+    )
+    
+    # Control
+    estado = models.CharField(max_length=10, choices=ESTADO_PROPIETARIO, default='activo', verbose_name="Estado")
+    fecha_registro = models.DateTimeField(auto_now_add=True, verbose_name="Fecha de registro")
+    notas_internas = models.TextField(blank=True, null=True, verbose_name="Notas internas")
+
+    class Meta:
+        verbose_name = "Propietario"
+        verbose_name_plural = "Propietarios"
+        ordering = ['nombre']
+
+    def __str__(self):
+        return f"{self.nombre} ({self.rut})"
+
+
+# ========================================
+# MODELO 3: PROYECTO (ACTUALIZADO)
+# ========================================
+class Proyecto(models.Model):
+    """
+    Representa un proyecto inmobiliario YA ENTREGADO donde pueden surgir reclamos de postventa.
+    Cada proyecto pertenece a una Constructora.
+    NOTA: Solo proyectos entregados aparecen aquí (no en construcción).
+    """
+    ESTADO_PROYECTO = [
+        ('entregado', 'Recién Entregado'),
+        ('garantia', 'En Garantía'),
+        ('finalizado', 'Garantía Finalizada'),
+    ]
+    
+    # Relación con Constructora
+    constructora = models.ForeignKey(
+        Constructora,
+        on_delete=models.CASCADE,
+        related_name='proyectos',
+        verbose_name="Constructora",
+        null=True,  # Temporal para migración
+        blank=True
+    )
+    
+    # Identificación
+    codigo = models.CharField(max_length=50, unique=True, verbose_name="Código del proyecto")
+    nombre = models.CharField(max_length=150, verbose_name="Nombre del proyecto")
+    
+    # Ubicación
+    ubicacion = models.CharField(max_length=200, verbose_name="Ubicación")
+    comuna = models.CharField(max_length=100, blank=True, null=True, verbose_name="Comuna")
+    region = models.CharField(max_length=100, blank=True, null=True, verbose_name="Región")
+    
+    # Detalles
+    cantidad_unidades = models.PositiveIntegerField(default=0, verbose_name="Cantidad de unidades")
+    encargado = models.CharField(max_length=120, blank=True, null=True, verbose_name="Encargado del proyecto")
+    telefono_encargado = models.CharField(max_length=30, blank=True, null=True, verbose_name="Teléfono encargado")
+    
+    # Fechas
+    fecha_inicio = models.DateField(blank=True, null=True, verbose_name="Fecha de inicio")
+    fecha_entrega = models.DateField(blank=True, null=True, verbose_name="Fecha de entrega")
+    
+    # Control
+    estado = models.CharField(max_length=15, choices=ESTADO_PROYECTO, default='entregado', verbose_name="Estado")
+    observaciones = models.TextField(blank=True, null=True, verbose_name="Observaciones")
+
+    class Meta:
+        verbose_name = "Proyecto"
+        verbose_name_plural = "Proyectos"
+        ordering = ['-fecha_entrega']
+
+    def __str__(self):
+        return f"{self.codigo} - {self.nombre}"
+
+
+# ========================================
+# MODELO 3: CATEGORÍA (SIMPLE - COMO SUGERISTE)
+# ========================================
+class Categoria(models.Model):
+    """
+    Tipo de falla o problema reportado (filtración, pintura, electricidad, etc.)
+    Modelo simple solo para clasificación.
+    """
+    nombre = models.CharField(max_length=80, unique=True, verbose_name="Nombre de categoría")
+
+    class Meta:
+        verbose_name = "Categoría"
+        verbose_name_plural = "Categorías"
+        ordering = ['nombre']
+
+    def __str__(self):
+        return self.nombre
+
+
+# ========================================
+# MODELO 4: TÉCNICO (COMPLETO)
+# ========================================
+class Tecnico(models.Model):
+    """
+    Personal técnico de la constructora que usa la plataforma.
+    Cada constructora gestiona sus propios técnicos.
+    """
+    ESTADO_TECNICO = [
+        ('disponible', 'Disponible'),
+        ('en_terreno', 'En Terreno'),
+        ('no_disponible', 'No Disponible'),
+        ('vacaciones', 'De Vacaciones'),
+    ]
+    
+    # Pertenece a una constructora
+    constructora = models.ForeignKey(
+        Constructora,
+        on_delete=models.CASCADE,
+        related_name='tecnicos',
+        verbose_name="Constructora",
+        null=True,  # Temporal para migración
+        blank=True
+    )
+    
+    # Relación con usuario
+    usuario = models.OneToOneField(User, on_delete=models.CASCADE, verbose_name="Usuario")
+
+    # Identificación
+    rut = models.CharField(
+        max_length=12,
+        unique=True,
+        blank=True,
+        null=True,
+        validators=[validate_rut],
+        verbose_name="RUT/DNI",
+        help_text="Formato libre con puntos/guion (ej: 12.345.678-9). Se normaliza en importación."
+    )
+    
+    # Información profesional
+    especialidad = models.CharField(max_length=100, verbose_name="Especialidad")
+    especialidades = models.ManyToManyField(
+        'Categoria',
+        related_name='tecnicos_especializados',
+        verbose_name="Especialidades",
+        help_text="Categorías de reclamos que puede atender",
+        blank=True
+    )
+    telefono = models.CharField(max_length=30, verbose_name="Teléfono")
+    email_corporativo = models.EmailField(blank=True, null=True, verbose_name="Email corporativo")
+    
+    # Foto de perfil (para RF-05)
+    foto_perfil = models.ImageField(
+        upload_to='tecnicos/fotos/',
+        blank=True,
+        null=True,
+        verbose_name="Foto de perfil",
+        help_text="Foto del técnico (150x150px recomendado)"
+    )
+    
+    # Zonas de trabajo
+    zonas_cobertura = models.TextField(blank=True, null=True, verbose_name="Zonas de cobertura", 
+                                       help_text="Comunas o sectores que atiende")
+    proyectos_asignados = models.ManyToManyField(
+        'Proyecto',
+        related_name='tecnicos_disponibles',
+        verbose_name="Proyectos asignados",
+        blank=True,
+        help_text="Proyectos donde este técnico puede atender"
+    )
+    
+    # Control operativo
+    estado = models.CharField(max_length=15, choices=ESTADO_TECNICO, default='disponible', verbose_name="Estado actual")
+    carga_maxima = models.PositiveIntegerField(default=10, verbose_name="Carga máxima de casos",
+                                               help_text="Cantidad máxima de casos simultáneos")
+    
+    # Sistema de agendamiento (RF-05, RF-07)
+    acepta_agendamiento_online = models.BooleanField(
+        default=True,
+        verbose_name="Acepta agendamiento online",
+        help_text="Si está marcado, los clientes pueden agendar citas directamente"
+    )
+    duracion_visita_default = models.PositiveIntegerField(
+        default=120,
+        verbose_name="Duración de visita (minutos)",
+        help_text="Tiempo promedio de visita en minutos (default: 120 = 2 horas)"
+    )
+    
+    # Métricas
+    calificacion_promedio = models.DecimalField(max_digits=3, decimal_places=2, default=0.00, 
+                                               validators=[MinValueValidator(0), MaxValueValidator(5)],
+                                               verbose_name="Calificación promedio")
+    cantidad_calificaciones = models.PositiveIntegerField(
+        default=0,
+        verbose_name="Cantidad de calificaciones",
+        help_text="Total de calificaciones recibidas"
+    )
+    casos_completados = models.PositiveIntegerField(default=0, verbose_name="Casos completados")
+    
+    # Fechas
+    fecha_ingreso = models.DateField(auto_now_add=True, verbose_name="Fecha de ingreso")
+
+    class Meta:
+        verbose_name = "Técnico"
+        verbose_name_plural = "Técnicos"
+
+    def __str__(self):
+        return f"{self.usuario.get_full_name() or self.usuario.username} - {self.especialidad}"
+    
+    def casos_activos(self):
+        """Retorna la cantidad de casos actualmente asignados"""
+        return self.reclamo_set.exclude(estado='cerrado').count()
+    
+    def tiene_disponibilidad(self):
+        """Verifica si el técnico puede aceptar más casos"""
+        return self.casos_activos() < self.carga_maxima and self.estado == 'disponible'
+
+
+# ========================================
+# MODELO 5: RECLAMO (COMPLETO - MUY IMPORTANTE)
+# ========================================
+class Reclamo(models.Model):
+    """
+    Registro principal de un reclamo o incidencia postventa.
+    Este es el modelo más crítico del sistema.
+    """
+    # Opciones de estado
+    ESTADOS = [
+        ('pendiente', 'Pendiente'),
+        ('asignado', 'Asignado'),
+        ('en_proceso', 'En Proceso'),
+        ('resuelto', 'Resuelto'),
+        ('cerrado', 'Cerrado'),
+        ('cancelado', 'Cancelado'),
+    ]
+
+    # Opciones de prioridad
+    PRIORIDADES = [
+        (1, 'Muy Alta - Urgente'),
+        (2, 'Alta'),
+        (3, 'Media'),
+        (4, 'Baja'),
+        (5, 'Muy Baja'),
+    ]
+    
+    # Tipo de garantía
+    TIPO_GARANTIA = [
+        ('legal', 'Garantía Legal (1 año)'),
+        ('extendida', 'Garantía Extendida (3 años)'),
+        ('cortesia', 'Cortesía'),
+    ]
+    
+    # Causa raíz
+    CAUSA_RAIZ = [
+        ('material_defectuoso', 'Material Defectuoso'),
+        ('mala_instalacion', 'Mala Instalación'),
+        ('desgaste_normal', 'Desgaste Normal'),
+        ('mal_uso', 'Mal Uso'),
+        ('otro', 'Otro'),
+    ]
+
+    # Identificación
+    folio = models.CharField(max_length=20, unique=True, editable=False, verbose_name="Folio/Código")
+    
+    # Relaciones
+    propietario = models.ForeignKey(Propietario, on_delete=models.CASCADE, verbose_name="Propietario")
+    proyecto = models.ForeignKey(Proyecto, on_delete=models.SET_NULL, null=True, blank=True, verbose_name="Proyecto")
+    categoria = models.ForeignKey(Categoria, on_delete=models.SET_NULL, null=True, blank=True, verbose_name="Categoría")
+    tecnico_asignado = models.ForeignKey(Tecnico, null=True, blank=True, on_delete=models.SET_NULL, verbose_name="Técnico asignado")
+    
+    # Ubicación específica
+    ubicacion_especifica = models.CharField(max_length=200, verbose_name="Ubicación específica",
+                                           help_text="Ej: Torre 2, Depto 305")
+    
+    # Descripción del problema
+    descripcion = models.TextField(verbose_name="Descripción del problema")
+    tipo_garantia = models.CharField(max_length=15, choices=TIPO_GARANTIA, default='legal', verbose_name="Tipo de garantía")
+    
+    # Estado
+    estado = models.CharField(max_length=20, choices=ESTADOS, default='pendiente', verbose_name="Estado")
+    
+    # Fechas críticas
+    fecha_creacion = models.DateTimeField(auto_now_add=True, verbose_name="Fecha de creación")
+    fecha_asignacion = models.DateTimeField(null=True, blank=True, verbose_name="Fecha de asignación")
+    fecha_primera_visita = models.DateTimeField(null=True, blank=True, verbose_name="Fecha primera visita")
+    fecha_estimada_resolucion = models.DateField(null=True, blank=True, verbose_name="Fecha estimada de resolución")
+    fecha_resolucion = models.DateTimeField(null=True, blank=True, verbose_name="Fecha de resolución")
+    fecha_cierre = models.DateTimeField(null=True, blank=True, verbose_name="Fecha de cierre")
+    
+    # Información técnica
+    observaciones_tecnico = models.TextField(blank=True, null=True, verbose_name="Observaciones del técnico")
+    causa_raiz = models.CharField(max_length=25, choices=CAUSA_RAIZ, blank=True, null=True, verbose_name="Causa raíz")
+    solucion_aplicada = models.TextField(blank=True, null=True, verbose_name="Solución aplicada")
+    
+    # Costos
+    costo_estimado = models.DecimalField(max_digits=10, decimal_places=2, default=0, verbose_name="Costo estimado")
+    costo_real = models.DecimalField(max_digits=10, decimal_places=2, default=0, verbose_name="Costo real")
+    
+    # Tiempo y recursos
+    horas_trabajadas = models.DecimalField(max_digits=5, decimal_places=2, default=0, verbose_name="Horas trabajadas")
+    materiales_utilizados = models.TextField(blank=True, null=True, verbose_name="Materiales utilizados (legacy)")
+    
+    # Gestión de escombros (campos legacy - migrados a modelo Escombro)
+    requiere_retiro_escombros = models.BooleanField(default=False, verbose_name="Requiere retiro de escombros (legacy)")
+    estado_escombros = models.CharField(max_length=15, 
+                                       choices=[
+                                           ('no_aplica', 'No Aplica'),
+                                           ('pendiente', 'Pendiente'),
+                                           ('programado', 'Programado'),
+                                           ('retirado', 'Retirado'),
+                                       ],
+                                       default='no_aplica',
+                                       verbose_name="Estado retiro escombros (legacy)")
+    fecha_retiro_escombros = models.DateTimeField(null=True, blank=True, verbose_name="Fecha retiro escombros (legacy)")
+    
+    # Feedback del propietario (RF-11 de tu documento)
+    comentarios_propietario = models.TextField(blank=True, null=True, verbose_name="Comentarios del propietario")
+    calificacion_propietario = models.PositiveSmallIntegerField(
+        null=True, 
+        blank=True,
+        validators=[MinValueValidator(1), MaxValueValidator(5)],
+        verbose_name="Calificación del propietario (1-5)",
+        help_text="1 = Muy insatisfecho, 5 = Muy satisfecho"
+    )
+
+    class Meta:
+        verbose_name = "Reclamo"
+        verbose_name_plural = "Reclamos"
+        ordering = ['-fecha_creacion']
+
+    def save(self, *args, **kwargs):
+        """
+        Sobrescribir save para:
+        1. Generar folio automático
+        2. Limpiar descripción (seguridad XSS)
+        3. Actualizar fecha de asignación
+        4. Marcar fecha de resolución automáticamente cuando el caso pasa a 'resuelto'
+        """
+        # Detectar estado previo (si existe) para saber si hubo transición a 'resuelto'
+        estado_prev = None
+        if self.pk:
+            try:
+                estado_prev = Reclamo.objects.only('estado').get(pk=self.pk).estado
+            except Reclamo.DoesNotExist:
+                estado_prev = None
+        # Generar folio único si no existe
+        if not self.folio:
+            from datetime import datetime
+            year = datetime.now().year
+            ultimo = Reclamo.objects.filter(folio__startswith=f'PV-{year}').count()
+            self.folio = f'PV-{year}-{str(ultimo + 1).zfill(4)}'
+        
+        # Seguridad: Escapar HTML en descripción
+        from django.utils.html import escape
+        if self.descripcion:
+            self.descripcion = escape(self.descripcion)
+        
+        # Actualizar fecha de asignación si se asigna técnico
+        if self.tecnico_asignado and not self.fecha_asignacion:
+            self.fecha_asignacion = timezone.now()
+            if self.estado == 'pendiente':
+                self.estado = 'asignado'
+        
+        # Si el estado es 'resuelto' y no hay fecha_resolucion, setearla automáticamente
+        # Solo al hacer la transición o si se guardó sin haberla fijado antes
+        if self.estado == 'resuelto' and not self.fecha_resolucion:
+            # Evitar fijarla si ya estaba resuelto previamente y ya tenía fecha (caso improbable)
+            if estado_prev != 'resuelto':
+                self.fecha_resolucion = timezone.now()
+
+        # Si el estado es 'cerrado' y no hay fecha_cierre, setearla automáticamente
+        if self.estado == 'cerrado' and not self.fecha_cierre:
+            if estado_prev != 'cerrado':
+                self.fecha_cierre = timezone.now()
+
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.folio} - {self.propietario.nombre}"
+    
+    def dias_abierto(self):
+        """Calcula los días que lleva abierto el reclamo"""
+        if self.fecha_cierre:
+            return (self.fecha_cierre - self.fecha_creacion).days
+        return (timezone.now() - self.fecha_creacion).days
+
+    def cancelar(self, motivo: str | None = None):
+        """
+        Cancela el reclamo y todas sus citas activas.
+
+        - Cambia estado del reclamo a 'cancelado'.
+        - Para cada cita en estados activos (pendiente, confirmada, en_curso), cambia a 'cancelada'.
+        - Usa el helper Cita.cancelar() para mantener consistencia de timestamps/motivo.
+        """
+        from django.db import transaction
+        with transaction.atomic():
+            # Cancelar todas las citas activas vinculadas
+            for c in self.citas.filter(estado__in=['pendiente', 'confirmada', 'en_curso']):
+                c.cancelar(motivo=motivo or 'Reclamo cancelado')
+            # Cambiar estado del reclamo
+            if self.estado != 'cancelado':
+                self.estado = 'cancelado'
+                self.save(update_fields=['estado'])
+
+    @property
+    def resolucion(self):
+        """
+        Compatibilidad para templates: expone "resolucion" como alias de
+        "solucion_aplicada". Si en el futuro se define un campo/flujo específico
+        para resolución, se puede ajustar aquí sin tocar las vistas/plantillas.
+        """
+        return self.solucion_aplicada
+
+
+# ========================================
+# MODELO 6: IMAGEN DE RECLAMO (MEJORADO)
+# ========================================
+class ImagenReclamo(models.Model):
+    """
+    Imágenes de evidencia asociadas a un reclamo.
+    Permite múltiples imágenes por reclamo.
+    """
+    TIPO_IMAGEN = [
+        ('antes', 'Antes'),
+        ('durante', 'Durante Reparación'),
+        ('despues', 'Después'),
+        ('evidencia', 'Evidencia General'),
+    ]
+    
+    SUBIDA_POR = [
+        ('propietario', 'Propietario'),
+        ('tecnico', 'Técnico'),
+        ('admin', 'Administrador'),
+    ]
+    
+    # Relaciones
+    reclamo = models.ForeignKey(Reclamo, on_delete=models.CASCADE, related_name='imagenes', verbose_name="Reclamo")
+    
+    # Archivo (puede ser imagen o video)
+    imagen = models.FileField(upload_to='fallas/%Y/%m/', blank=True, null=True, verbose_name="Archivo")
+    
+    # Metadata
+    tipo = models.CharField(max_length=10, choices=TIPO_IMAGEN, default='evidencia', verbose_name="Tipo de imagen")
+    descripcion = models.CharField(max_length=200, blank=True, null=True, verbose_name="Descripción")
+    subida_por = models.CharField(max_length=15, choices=SUBIDA_POR, default='propietario', verbose_name="Subida por")
+    
+    # Control
+    fecha_subida = models.DateTimeField(auto_now_add=True, verbose_name="Fecha de subida")
+
+    class Meta:
+        verbose_name = "Archivo de reclamo"
+        verbose_name_plural = "Archivos de reclamos"
+        ordering = ['tipo', 'fecha_subida']
+
+    def __str__(self):
+        return f"Archivo {self.tipo} - {self.reclamo.folio}"
+    
+    def es_video(self):
+        """
+        Verifica si el archivo es un video
+        """
+        if self.imagen:
+            video_extensions = ['.mp4', '.mov', '.avi', '.mkv', '.webm', '.flv']
+            return any(self.imagen.name.lower().endswith(ext) for ext in video_extensions)
+        return False
+    
+    def es_imagen(self):
+        """
+        Verifica si el archivo es una imagen
+        """
+        if self.imagen:
+            image_extensions = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp']
+            return any(self.imagen.name.lower().endswith(ext) for ext in image_extensions)
+        return False
+
+
+# ========================================
+# MODELO 7: DISPONIBILIDAD TECNICO (NUEVO - RF-10)
+# ========================================
+class DisponibilidadTecnico(models.Model):
+    """
+    Horario semanal de disponibilidad del técnico.
+    Define en qué días y horarios el técnico puede recibir agendamientos.
+    """
+    DIAS_SEMANA = [
+        (0, 'Lunes'),
+        (1, 'Martes'),
+        (2, 'Miércoles'),
+        (3, 'Jueves'),
+        (4, 'Viernes'),
+        (5, 'Sábado'),
+        (6, 'Domingo'),
+    ]
+    
+    tecnico = models.ForeignKey(
+        Tecnico,
+        on_delete=models.CASCADE,
+        related_name='disponibilidades',
+        verbose_name="Técnico"
+    )
+    dia_semana = models.IntegerField(
+        choices=DIAS_SEMANA,
+        verbose_name="Día de la semana"
+    )
+    hora_inicio = models.TimeField(verbose_name="Hora de inicio")
+    hora_fin = models.TimeField(verbose_name="Hora de fin")
+    activo = models.BooleanField(
+        default=True,
+        verbose_name="Activo",
+        help_text="Desmarcar para deshabilitar temporalmente"
+    )
+    
+    class Meta:
+        verbose_name = "Disponibilidad de técnico"
+        verbose_name_plural = "Disponibilidades de técnicos"
+        ordering = ['dia_semana', 'hora_inicio']
+        unique_together = ['tecnico', 'dia_semana', 'hora_inicio']
+    
+    def __str__(self):
+        return f"{self.tecnico.usuario.get_full_name()} - {self.get_dia_semana_display()} {self.hora_inicio}-{self.hora_fin}"
+
+
+# ========================================
+# MODELO 8: CITA (NUEVO - RF-05, RF-07, RF-08)
+# ========================================
+class Cita(models.Model):
+    """
+    Agendamiento de visita técnica.
+    Registra la cita programada entre el técnico y el propietario.
+    """
+    ESTADO_CITA = [
+        ('pendiente', 'Pendiente'),
+        ('confirmada', 'Confirmada'),
+        ('en_curso', 'En Curso'),
+        ('completada', 'Completada'),
+        ('cancelada', 'Cancelada'),
+        ('reprogramada', 'Reprogramada'),
+    ]
+    
+    reclamo = models.ForeignKey(
+        Reclamo,
+        on_delete=models.CASCADE,
+        related_name='citas',
+        verbose_name="Reclamo"
+    )
+    tecnico = models.ForeignKey(
+        Tecnico,
+        on_delete=models.CASCADE,
+        related_name='citas',
+        verbose_name="Técnico"
+    )
+    propietario = models.ForeignKey(
+        Propietario,
+        on_delete=models.CASCADE,
+        related_name='citas',
+        verbose_name="Propietario"
+    )
+    
+    # Fecha y hora
+    fecha_cita = models.DateField(verbose_name="Fecha de la cita")
+    hora_inicio = models.TimeField(verbose_name="Hora de inicio")
+    hora_fin = models.TimeField(verbose_name="Hora de fin")
+    duracion_estimada = models.PositiveIntegerField(
+        default=120,
+        verbose_name="Duración estimada (minutos)"
+    )
+    
+    # Estado y seguimiento
+    estado = models.CharField(
+        max_length=15,
+        choices=ESTADO_CITA,
+        default='pendiente',
+        verbose_name="Estado"
+    )
+    notas_cliente = models.TextField(
+        blank=True,
+        null=True,
+        verbose_name="Notas del cliente",
+        help_text="Información adicional del propietario"
+    )
+    notas_tecnico = models.TextField(
+        blank=True,
+        null=True,
+        verbose_name="Notas del técnico",
+        help_text="Observaciones del técnico"
+    )
+    
+    # Control de cambios
+    fecha_creacion = models.DateTimeField(auto_now_add=True, verbose_name="Fecha de creación")
+    fecha_confirmacion = models.DateTimeField(
+        blank=True,
+        null=True,
+        verbose_name="Fecha de confirmación"
+    )
+    fecha_cancelacion = models.DateTimeField(
+        blank=True,
+        null=True,
+        verbose_name="Fecha de cancelación"
+    )
+    motivo_cancelacion = models.TextField(
+        blank=True,
+        null=True,
+        verbose_name="Motivo de cancelación"
+    )
+    
+    # Cita original (para reprogramaciones - RF-09)
+    cita_original = models.ForeignKey(
+        'self',
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name='reprogramaciones',
+        verbose_name="Cita original"
+    )
+    
+    class Meta:
+        verbose_name = "Cita"
+        verbose_name_plural = "Citas"
+        ordering = ['-fecha_cita', '-hora_inicio']
+    
+    def __str__(self):
+        return f"Cita {self.id} - {self.tecnico.usuario.get_full_name()} - {self.fecha_cita} {self.hora_inicio}"
+    
+    def confirmar(self):
+        """Confirma la cita"""
+        self.estado = 'confirmada'
+        self.fecha_confirmacion = timezone.now()
+        self.save()
+        try:
+            BitacoraCita.objects.create(
+                cita=self,
+                reclamo=self.reclamo,
+                accion='confirmada'
+            )
+        except Exception:
+            pass
+    
+    def cancelar(self, motivo):
+        """Cancela la cita"""
+        self.estado = 'cancelada'
+        self.fecha_cancelacion = timezone.now()
+        self.motivo_cancelacion = motivo
+        self.save()
+        try:
+            BitacoraCita.objects.create(
+                cita=self,
+                reclamo=self.reclamo,
+                accion='cancelada',
+                detalle=motivo or ''
+            )
+        except Exception:
+            pass
+
+    def iniciar(self, actor: User | None = None):
+        """Marca la cita como en curso."""
+        if self.estado in ['cancelada', 'completada']:
+            return
+        self.estado = 'en_curso'
+        self.save(update_fields=['estado'])
+        # Marcar reclamo como en proceso si no está en un estado final
+        try:
+            if self.reclamo.estado not in ['resuelto', 'cerrado', 'cancelado']:
+                self.reclamo.estado = 'en_proceso'
+                self.reclamo.save(update_fields=['estado'])
+        except Exception:
+            pass
+        try:
+            BitacoraCita.objects.create(
+                cita=self,
+                reclamo=self.reclamo,
+                accion='nota',
+                detalle='Visita iniciada',
+                actor=actor
+            )
+        except Exception:
+            pass
+
+    def completar(self, actor: User | None = None, detalle: str | None = None):
+        """Marca la cita como completada y registra en Bitácora."""
+        if self.estado in ['cancelada', 'completada']:
+            return
+        self.estado = 'completada'
+        self.save(update_fields=['estado'])
+        try:
+            BitacoraCita.objects.create(
+                cita=self,
+                reclamo=self.reclamo,
+                accion='completada',
+                detalle=(detalle or '').strip()[:500] or None,
+                actor=actor
+            )
+        except Exception:
+            pass
+
+
+class BitacoraCita(models.Model):
+    """Registro de eventos relevantes en el ciclo de vida de una Cita."""
+    ACCIONES = [
+        ('creada', 'Creada'),
+        ('confirmada', 'Confirmada'),
+        ('reprogramada', 'Reprogramada'),
+        ('cancelada', 'Cancelada'),
+        ('completada', 'Completada'),
+        ('nota', 'Nota'),
+    ]
+    cita = models.ForeignKey('Cita', on_delete=models.CASCADE, related_name='bitacoras')
+    reclamo = models.ForeignKey('Reclamo', on_delete=models.CASCADE, related_name='bitacoras_citas')
+    accion = models.CharField(max_length=20, choices=ACCIONES)
+    detalle = models.TextField(blank=True, null=True)
+    actor = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
+    fecha = models.DateTimeField(auto_now_add=True)
+    # Para reprogramaciones, guardar antiguo y nuevo horario
+    old_fecha = models.DateField(null=True, blank=True)
+    old_hora_inicio = models.TimeField(null=True, blank=True)
+    old_hora_fin = models.TimeField(null=True, blank=True)
+    new_fecha = models.DateField(null=True, blank=True)
+    new_hora_inicio = models.TimeField(null=True, blank=True)
+    new_hora_fin = models.TimeField(null=True, blank=True)
+
+    class Meta:
+        verbose_name = 'Bitácora de Cita'
+        verbose_name_plural = 'Bitácoras de Cita'
+        ordering = ['-fecha']
+
+    def __str__(self):
+        return f"[{self.fecha:%Y-%m-%d %H:%M}] {self.cita_id} - {self.get_accion_display()}"
+
+
+# ========================================
+# MODELO 9: BLOQUEO CALENDARIO (NUEVO - RF-10)
+# ========================================
+class BloqueoCalendario(models.Model):
+    """
+    Bloqueos específicos en el calendario del técnico.
+    Para vacaciones, permisos, días festivos, etc.
+    """
+    TIPO_BLOQUEO = [
+        ('vacaciones', 'Vacaciones'),
+        ('permiso', 'Permiso'),
+        ('capacitacion', 'Capacitación'),
+        ('festivo', 'Día Festivo'),
+        ('otro', 'Otro'),
+    ]
+    
+    tecnico = models.ForeignKey(
+        Tecnico,
+        on_delete=models.CASCADE,
+        related_name='bloqueos',
+        verbose_name="Técnico"
+    )
+    fecha_inicio = models.DateField(verbose_name="Fecha de inicio")
+    fecha_fin = models.DateField(verbose_name="Fecha de fin")
+    tipo = models.CharField(
+        max_length=15,
+        choices=TIPO_BLOQUEO,
+        default='otro',
+        verbose_name="Tipo de bloqueo"
+    )
+    motivo = models.CharField(
+        max_length=200,
+        verbose_name="Motivo",
+        help_text="Descripción breve del bloqueo"
+    )
+    todo_el_dia = models.BooleanField(
+        default=True,
+        verbose_name="Todo el día",
+        help_text="Si es False, especificar hora_inicio y hora_fin"
+    )
+    hora_inicio = models.TimeField(
+        blank=True,
+        null=True,
+        verbose_name="Hora de inicio"
+    )
+    hora_fin = models.TimeField(
+        blank=True,
+        null=True,
+        verbose_name="Hora de fin"
+    )
+    
+    class Meta:
+        verbose_name = "Bloqueo de calendario"
+        verbose_name_plural = "Bloqueos de calendario"
+        ordering = ['-fecha_inicio']
+    
+    def __str__(self):
+        return f"{self.tecnico.usuario.get_full_name()} - {self.get_tipo_display()} ({self.fecha_inicio} - {self.fecha_fin})"
+
+
+# ========================================
+# MODELO 10: MATERIAL (NUEVO - SEGÚN DIAGRAMA ER)
+# ========================================
+class Material(models.Model):
+    """
+    Materiales utilizados en la resolución de un reclamo.
+    Permite registro detallado de recursos empleados.
+    """
+    reclamo = models.ForeignKey(
+        Reclamo,
+        on_delete=models.CASCADE,
+        related_name='materiales',
+        verbose_name="Reclamo"
+    )
+    nombre = models.CharField(max_length=150, verbose_name="Nombre del material")
+    cantidad = models.DecimalField(
+        max_digits=8,
+        decimal_places=2,
+        default=1,
+        verbose_name="Cantidad"
+    )
+    unidad = models.CharField(
+        max_length=30,
+        default='unidad',
+        verbose_name="Unidad de medida",
+        help_text="Ej: metros, litros, unidades, kg"
+    )
+    costo_unitario = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=0,
+        verbose_name="Costo unitario"
+    )
+    proveedor = models.CharField(
+        max_length=150,
+        blank=True,
+        null=True,
+        verbose_name="Proveedor"
+    )
+    fecha_uso = models.DateField(
+        auto_now_add=True,
+        verbose_name="Fecha de uso"
+    )
+    observaciones = models.TextField(
+        blank=True,
+        null=True,
+        verbose_name="Observaciones"
+    )
+
+    class Meta:
+        verbose_name = "Material"
+        verbose_name_plural = "Materiales"
+        ordering = ['-fecha_uso']
+
+    def __str__(self):
+        return f"{self.nombre} ({self.cantidad} {self.unidad}) - {self.reclamo.folio}"
+
+    @property
+    def costo_total(self):
+        """Calcula el costo total (cantidad * costo_unitario)"""
+        return self.cantidad * self.costo_unitario
+
+
+# ========================================
+# MODELO 11: ESCOMBRO (NUEVO - SEGÚN DIAGRAMA ER)
+# ========================================
+class Escombro(models.Model):
+    """
+    Gestión de retiro de escombros asociados a un reclamo.
+    Permite programar y hacer seguimiento del retiro.
+    """
+    ESTADO_ESCOMBRO = [
+        ('pendiente', 'Pendiente'),
+        ('programado', 'Programado'),
+        ('retirado', 'Retirado'),
+        ('cancelado', 'Cancelado'),
+    ]
+
+    reclamo = models.OneToOneField(
+        Reclamo,
+        on_delete=models.CASCADE,
+        related_name='gestion_escombro',
+        verbose_name="Reclamo"
+    )
+    requiere_retiro = models.BooleanField(
+        default=True,
+        verbose_name="Requiere retiro"
+    )
+    volumen_estimado = models.DecimalField(
+        max_digits=6,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        verbose_name="Volumen estimado (m³)"
+    )
+    tipo_escombro = models.CharField(
+        max_length=100,
+        blank=True,
+        null=True,
+        verbose_name="Tipo de escombro",
+        help_text="Ej: escombros de construcción, muebles, electrodomésticos"
+    )
+    estado = models.CharField(
+        max_length=15,
+        choices=ESTADO_ESCOMBRO,
+        default='pendiente',
+        verbose_name="Estado"
+    )
+    fecha_programada = models.DateField(
+        null=True,
+        blank=True,
+        verbose_name="Fecha programada de retiro"
+    )
+    fecha_retiro = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name="Fecha real de retiro"
+    )
+    empresa_retiro = models.CharField(
+        max_length=150,
+        blank=True,
+        null=True,
+        verbose_name="Empresa de retiro"
+    )
+    costo_retiro = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=0,
+        verbose_name="Costo del retiro"
+    )
+    observaciones = models.TextField(
+        blank=True,
+        null=True,
+        verbose_name="Observaciones"
+    )
+
+    class Meta:
+        verbose_name = "Gestión de Escombro"
+        verbose_name_plural = "Gestión de Escombros"
+        ordering = ['-fecha_programada']
+
+    def __str__(self):
+        return f"Escombro {self.reclamo.folio} - {self.get_estado_display()}"
+
+
+# ========================================
+# MODELO 12: NOTIFICACION (NUEVO - SEGÚN DIAGRAMA ER)
+# ========================================
+class Notificacion(models.Model):
+    """
+    Sistema de notificaciones por email para usuarios (propietarios y técnicos).
+    Permite envío de alertas y seguimiento del estado del envío.
+    """
+    ESTADO_NOTIFICACION = [
+        ('pendiente', 'Pendiente'),
+        ('enviada', 'Enviada'),
+        ('fallida', 'Fallida'),
+        ('leida', 'Leída'),
+    ]
+
+    # Destinatario (puede ser propietario o técnico)
+    propietario = models.ForeignKey(
+        Propietario,
+        on_delete=models.CASCADE,
+        related_name='notificaciones',
+        null=True,
+        blank=True,
+        verbose_name="Propietario"
+    )
+    tecnico = models.ForeignKey(
+        Tecnico,
+        on_delete=models.CASCADE,
+        related_name='notificaciones',
+        null=True,
+        blank=True,
+        verbose_name="Técnico"
+    )
+
+    # Contexto
+    reclamo = models.ForeignKey(
+        Reclamo,
+        on_delete=models.SET_NULL,
+        related_name='notificaciones',
+        null=True,
+        blank=True,
+        verbose_name="Reclamo relacionado"
+    )
+    cita = models.ForeignKey(
+        Cita,
+        on_delete=models.SET_NULL,
+        related_name='notificaciones',
+        null=True,
+        blank=True,
+        verbose_name="Cita relacionada"
+    )
+
+    # Contenido del email
+    asunto = models.CharField(
+        max_length=200,
+        verbose_name="Asunto"
+    )
+    mensaje = models.TextField(
+        verbose_name="Mensaje"
+    )
+    estado = models.CharField(
+        max_length=15,
+        choices=ESTADO_NOTIFICACION,
+        default='pendiente',
+        verbose_name="Estado"
+    )
+
+    # Control de envío
+    fecha_creacion = models.DateTimeField(
+        auto_now_add=True,
+        verbose_name="Fecha de creación"
+    )
+    fecha_envio = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name="Fecha de envío"
+    )
+    fecha_lectura = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name="Fecha de lectura"
+    )
+    intentos_envio = models.PositiveIntegerField(
+        default=0,
+        verbose_name="Intentos de envío"
+    )
+    error_mensaje = models.TextField(
+        blank=True,
+        null=True,
+        verbose_name="Mensaje de error"
+    )
+
+    class Meta:
+        verbose_name = "Notificación Email"
+        verbose_name_plural = "Notificaciones Email"
+        ordering = ['-fecha_creacion']
+
+    def __str__(self):
+        destinatario = self.propietario or self.tecnico
+        return f"Email - {destinatario} - {self.asunto}"
+
+    def marcar_como_leida(self):
+        """Marca la notificación como leída"""
+        if self.estado != 'leida':
+            self.estado = 'leida'
+            self.fecha_lectura = timezone.now()
+            self.save(update_fields=['estado', 'fecha_lectura'])

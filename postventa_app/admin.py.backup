@@ -1,0 +1,919 @@
+from django.contrib import admin, messages
+from django.utils.html import format_html
+from django.contrib.auth.models import User, Group
+from django import forms
+from .models import (
+    Constructora, Cliente, Proyecto, Usuario, Tecnico, Reclamo, 
+    ArchivoEvidencia, Cita, Material, GestionEscombros, Notificacion,
+    AsignacionTecnico, UsoMaterial, VisitaTecnica, EncuestaSatisfaccion, Historial
+)
+
+
+# ========================================
+# ADMIN SITE PERSONALIZADO PARA GESTIÓN COMERCIAL
+# ========================================
+class GestionComercialAdminSite(admin.AdminSite):
+    """
+    Sitio de administración separado para gestión comercial (Constructoras)
+    Solo accesible por superusuarios
+    """
+    site_header = "Administración Comercial - Plataforma Postventa"
+    site_title = "Gestión Comercial"
+    index_title = "Gestión de Clientes del SaaS"
+
+# Instancia del sitio personalizado
+comercial_admin = GestionComercialAdminSite(name='comercial_admin')
+
+
+# ========================================
+# CONFIGURACIÓN ADMIN: CONSTRUCTORA
+# ========================================
+class ConstructoraAdmin(admin.ModelAdmin):
+    """
+    Configuración del panel admin para Constructora
+    """
+    list_display = ['razon_social', 'rut', 'nombre_comercial', 'plan', 'telefono', 'email_principal', 'estado', 'badge_estado']
+    search_fields = ['razon_social', 'rut', 'nombre_comercial', 'email_principal']
+    readonly_fields = ['fecha_registro']
+    list_filter = ['plan', 'estado', 'fecha_inicio_contrato']
+    
+    fieldsets = (
+        ('Identificación', {
+            'fields': ('rut', 'razon_social', 'nombre_comercial')
+        }),
+        ('Contacto Empresa', {
+            'fields': ('email_principal', 'telefono', 'direccion', 'sitio_web')
+        }),
+        ('Ejecutivo de Cuenta', {
+            'fields': ('nombre_ejecutivo', 'email_ejecutivo', 'telefono_ejecutivo'),
+            'classes': ('collapse',)
+        }),
+        ('Contrato', {
+            'fields': ('plan', 'fecha_inicio_contrato', 'fecha_fin_contrato', 'estado')
+        }),
+        ('Control', {
+            'fields': ('fecha_registro', 'notas'),
+            'classes': ('collapse',)
+        }),
+    )
+    
+    def badge_estado(self, obj):
+        """Badge de estado con color"""
+        colores = {
+            'activo': '#28a745',
+            'suspendido': '#ffc107',
+            'inactivo': '#dc3545'
+        }
+        return format_html(
+            '<span style="background-color: {}; color: white; padding: 3px 10px; border-radius: 3px;">{}</span>',
+            colores.get(obj.estado, '#6c757d'),
+            obj.get_estado_display()
+        )
+    badge_estado.short_description = 'Estado'
+    
+    def has_module_permission(self, request):
+        """Solo superusuarios pueden acceder a Constructoras"""
+        return request.user.is_superuser
+
+
+# Registrar en el sitio comercial (solo superusuarios)
+comercial_admin.register(Constructora, ConstructoraAdmin)
+
+
+# ========================================
+# CONFIGURACIÓN ADMIN: PROPIETARIO
+# ========================================
+class PropietarioAdminForm(forms.ModelForm):
+    """
+    Formulario personalizado para Propietario con campos de contraseña
+    """
+    password1 = forms.CharField(
+        label='Contraseña',
+        widget=forms.PasswordInput(attrs={
+            'placeholder': 'Establece una contraseña segura',
+            'autocomplete': 'new-password'
+        }),
+        required=False,
+        help_text='Mínimo 8 caracteres. La contraseña será compartida con el propietario.'
+    )
+    password2 = forms.CharField(
+        label='Confirmar contraseña',
+        widget=forms.PasswordInput(attrs={
+            'placeholder': 'Repite la contraseña',
+            'autocomplete': 'new-password'
+        }),
+        required=False,
+        help_text='Ingresa la misma contraseña para verificación.'
+    )
+    
+    class Meta:
+        model = Propietario
+        fields = '__all__'
+    
+    def clean(self):
+        cleaned_data = super().clean()
+        password1 = cleaned_data.get('password1')
+        password2 = cleaned_data.get('password2')
+        
+        # Validar contraseñas solo si se proporcionan
+        if password1 or password2:
+            if password1 != password2:
+                raise forms.ValidationError('Las contraseñas no coinciden.')
+            
+            if len(password1) < 8:
+                raise forms.ValidationError('La contraseña debe tener al menos 8 caracteres.')
+        
+        return cleaned_data
+
+
+@admin.register(Propietario)
+class PropietarioAdmin(admin.ModelAdmin):
+    """
+    Configuración del panel admin para Propietario
+    La constructora debe establecer contraseña inicial al crear el propietario
+    """
+    form = PropietarioAdminForm
+    list_display = ['nombre', 'rut', 'tiene_usuario', 'proyecto', 'unidad', 'tipo_propietario', 'telefono', 'email', 'estado', 'badge_estado']
+    search_fields = ['nombre', 'rut', 'email', 'telefono']
+    readonly_fields = ['fecha_registro', 'mostrar_credenciales']
+    list_filter = ['tipo_propietario', 'estado', 'fecha_registro', 'proyecto']
+    
+    fieldsets = (
+        ('Información Básica', {
+            'fields': ('nombre', 'rut', 'tipo_propietario')
+        }),
+        ('Contacto', {
+            'fields': ('email', 'telefono', 'telefono_alternativo', 'direccion')
+        }),
+        ('Propiedad', {
+            'fields': ('proyecto', 'unidad', 'fecha_compra')
+        }),
+        ('Contraseña de Acceso', {
+            'fields': ('password1', 'password2'),
+            'description': 'Establece una contraseña segura que el propietario usará para acceder al sistema.'
+        }),
+        ('Control', {
+            'fields': ('estado', 'fecha_registro', 'notas_internas')
+        }),
+        ('Credenciales Generadas', {
+            'fields': ('mostrar_credenciales',),
+            'classes': ('collapse',),
+            'description': 'Credenciales de acceso para compartir con el propietario.'
+        }),
+    )
+    
+    def get_fields(self, request, obj=None):
+        """
+        Mostrar campos de contraseña solo al crear (no al editar)
+        """
+        fields = super().get_fields(request, obj)
+        if obj:  # Si está editando
+            # Remover campos de contraseña
+            fields = [f for f in fields if f not in ('password1', 'password2')]
+        return fields
+    
+    def get_fieldsets(self, request, obj=None):
+        """
+        Ajustar fieldsets según si está creando o editando
+        """
+        if obj:  # Editando
+            return (
+                ('Información Básica', {
+                    'fields': ('nombre', 'rut', 'tipo_propietario')
+                }),
+                ('Contacto', {
+                    'fields': ('email', 'telefono', 'telefono_alternativo', 'direccion')
+                }),
+                ('Propiedad', {
+                    'fields': ('proyecto', 'unidad', 'fecha_compra')
+                }),
+                ('Control', {
+                    'fields': ('estado', 'fecha_registro', 'notas_internas')
+                }),
+                ('Credenciales de Acceso', {
+                    'fields': ('mostrar_credenciales',),
+                    'description': 'Credenciales actuales. Para cambiar la contraseña, use "Cambiar contraseña" en el menú de usuario.'
+                }),
+            )
+        return super().get_fieldsets(request, obj)
+    
+    def mostrar_credenciales(self, obj):
+        """Muestra las credenciales de acceso si tiene usuario"""
+        if obj.user:
+            return format_html(
+                '<div style="background: #f0f8ff; padding: 15px; border-radius: 5px; border-left: 4px solid #2196F3;">'
+                '<strong style="color: #1976D2;">✓ Usuario creado exitosamente</strong><br><br>'
+                '<strong>Login con RUT:</strong> <code style="background: #e3f2fd; padding: 5px 10px; border-radius: 3px;">{}</code><br>'
+                '<strong>Login con Email:</strong> <code style="background: #e3f2fd; padding: 5px 10px; border-radius: 3px;">{}</code><br>'
+                '<strong>Contraseña:</strong> <code style="background: #ffeb3b; padding: 5px 10px; border-radius: 3px; color: #000;">La establecida al crear el usuario</code><br><br>'
+                '<small style="color: #666;">💡 El propietario puede ingresar con RUT (con o sin formato) o con Email</small>'
+                '</div>',
+                obj.rut,
+                obj.email
+            )
+        return format_html(
+            '<div style="background: #fff3cd; padding: 15px; border-radius: 5px; border-left: 4px solid #ffc107;">'
+            '<strong style="color: #856404;">⚠ Usuario aún no creado</strong><br><br>'
+            '<small style="color: #666;">El usuario se creará al guardar el propietario con contraseña</small>'
+            '</div>'
+        )
+    mostrar_credenciales.short_description = 'Credenciales de Acceso'
+    
+    def tiene_usuario(self, obj):
+        """Indica si tiene usuario creado"""
+        if obj.user:
+            return format_html(
+                '<span style="color: green;">✓ {}</span>',
+                obj.user.username
+            )
+        return format_html('<span style="color: red;">✗ Sin usuario</span>')
+    tiene_usuario.short_description = 'Usuario'
+    
+    def badge_estado(self, obj):
+        """Muestra el estado con color"""
+        color = 'green' if obj.estado == 'activo' else 'red'
+        return format_html(
+            '<span style="background-color: {}; color: white; padding: 3px 10px; border-radius: 3px;">{}</span>',
+            color, obj.get_estado_display()
+        )
+    badge_estado.short_description = 'Estado Visual'
+    
+    def save_model(self, request, obj, form, change):
+        """
+        Crear usuario User con contraseña personalizada al crear propietario
+        """
+        # Guardar primero el propietario
+        super().save_model(request, obj, form, change)
+        
+        # Si es creación nueva y no tiene usuario, crearlo
+        if not change and not obj.user:
+            password1 = form.cleaned_data.get('password1')
+            
+            if password1:
+                # Crear usuario con RUT sin formato como username
+                rut_limpio = obj.rut.replace('.', '').replace('-', '')
+                user = User.objects.create_user(
+                    username=rut_limpio,
+                    email=obj.email,
+                    password=password1
+                )
+                # Establecer nombre del usuario
+                nombres = obj.nombre.split()
+                user.first_name = nombres[0] if nombres else ''
+                user.last_name = ' '.join(nombres[1:]) if len(nombres) > 1 else ''
+                user.save()
+                
+                # Asociar usuario al propietario
+                obj.user = user
+                obj.save()
+                
+                messages.success(request, f'Usuario creado exitosamente para {obj.nombre}. Credenciales listas para compartir.')
+            else:
+                messages.warning(request, 'No se estableció contraseña. El propietario no podrá acceder al sistema hasta que se le asigne una.')
+
+
+# ========================================
+# CONFIGURACIÓN ADMIN: PROYECTO
+# ========================================
+@admin.register(Proyecto)
+class ProyectoAdmin(admin.ModelAdmin):
+    """
+    Configuración del panel admin para Proyecto
+    """
+    list_display = ['codigo', 'nombre', 'constructora', 'ubicacion', 'cantidad_unidades', 'estado', 'fecha_entrega']
+    list_filter = ['constructora', 'estado', 'region', 'fecha_entrega']
+    search_fields = ['codigo', 'nombre', 'ubicacion', 'constructora__razon_social']
+    date_hierarchy = 'fecha_entrega'
+    
+    fieldsets = (
+        ('Constructora', {
+            'fields': ('constructora',)
+        }),
+        ('Identificación', {
+            'fields': ('codigo', 'nombre')
+        }),
+        ('Ubicación', {
+            'fields': ('ubicacion', 'comuna', 'region')
+        }),
+        ('Detalles', {
+            'fields': ('cantidad_unidades', 'encargado', 'telefono_encargado')
+        }),
+        ('Fechas', {
+            'fields': ('fecha_inicio', 'fecha_entrega')
+        }),
+        ('Control', {
+            'fields': ('estado', 'observaciones')
+        }),
+    )
+
+
+# ========================================
+# CONFIGURACIÓN ADMIN: CATEGORÍA
+# ========================================
+@admin.register(Categoria)
+class CategoriaAdmin(admin.ModelAdmin):
+    """
+    Configuración simple para Categoría
+    """
+    list_display = ['nombre']
+    search_fields = ['nombre']
+
+
+# ========================================
+# CONFIGURACIÓN ADMIN: TÉCNICO
+# ========================================
+@admin.register(Tecnico)
+class TecnicoAdmin(admin.ModelAdmin):
+    """
+    Configuración del panel admin para Técnico
+    """
+    list_display = ['usuario', 'rut', 'constructora', 'especialidad', 'telefono', 'estado', 'casos_activos', 'calificacion_promedio']
+    list_filter = ['constructora', 'estado', 'especialidad', 'fecha_ingreso']
+    search_fields = ['rut', 'usuario__username', 'usuario__first_name', 'usuario__last_name', 'especialidad', 'constructora__razon_social']
+    readonly_fields = ['fecha_ingreso', 'casos_completados', 'calificacion_promedio']
+    
+    fieldsets = (
+        ('Constructora', {
+            'fields': ('constructora',)
+        }),
+        ('Usuario / Identificación', {
+            'fields': ('usuario', 'rut')
+        }),
+        ('Información Profesional', {
+            'fields': ('especialidad', 'telefono', 'email_corporativo', 'zonas_cobertura')
+        }),
+        ('Control Operativo', {
+            'fields': ('estado', 'carga_maxima')
+        }),
+        ('Métricas', {
+            'fields': ('calificacion_promedio', 'casos_completados', 'fecha_ingreso')
+        }),
+    )
+
+
+# ========================================
+# INLINE: IMÁGENES DE RECLAMO
+# ========================================
+class ImagenReclamoInline(admin.TabularInline):
+    """
+    Permite agregar imágenes directamente desde el formulario de Reclamo
+    """
+    model = ImagenReclamo
+    extra = 3
+    fields = ['imagen', 'tipo', 'descripcion', 'subida_por']
+    readonly_fields = ['fecha_subida']
+
+
+# ========================================
+# INLINE: MATERIALES DEL RECLAMO
+# ========================================
+class MaterialInline(admin.TabularInline):
+    """
+    Permite agregar materiales directamente desde el formulario de Reclamo
+    """
+    model = Material
+    extra = 1
+    fields = ['nombre', 'cantidad', 'unidad', 'costo_unitario', 'proveedor', 'observaciones']
+    readonly_fields = []
+
+
+# ========================================
+# INLINE: ESCOMBRO DEL RECLAMO
+# ========================================
+class EscombroInline(admin.StackedInline):
+    """
+    Permite gestionar escombros directamente desde el formulario de Reclamo
+    """
+    model = Escombro
+    extra = 0
+    fields = [
+        ('requiere_retiro', 'volumen_estimado', 'tipo_escombro'),
+        ('estado', 'fecha_programada', 'fecha_retiro'),
+        ('empresa_retiro', 'costo_retiro'),
+        'observaciones'
+    ]
+    readonly_fields = []
+
+
+# ========================================
+# CONFIGURACIÓN ADMIN: RECLAMO (EL MÁS IMPORTANTE)
+# ========================================
+@admin.register(Reclamo)
+class ReclamoAdmin(admin.ModelAdmin):
+    """
+    Configuración avanzada del panel admin para Reclamo
+    Este es el modelo más crítico del sistema
+    """
+    list_display = [
+        'folio', 
+        'propietario', 
+        'proyecto', 
+        'categoria',
+        'badge_estado',
+        'tecnico_asignado',
+        'fecha_creacion',
+        'dias_abierto'
+    ]
+    
+    list_filter = [
+        'estado',
+        'categoria',
+        'tipo_garantia',
+        'requiere_retiro_escombros',
+        'fecha_creacion'
+    ]
+    
+    search_fields = [
+        'folio',
+        'propietario__nombre',
+        'propietario__rut',
+        'proyecto__nombre',
+        'descripcion',
+        'ubicacion_especifica'
+    ]
+    
+    readonly_fields = [
+        'folio',
+        'fecha_creacion',
+        'fecha_asignacion',
+        'dias_abierto'
+    ]
+    
+    date_hierarchy = 'fecha_creacion'
+    
+    inlines = [ImagenReclamoInline, MaterialInline, EscombroInline]
+    
+    fieldsets = (
+        ('Identificación', {
+            'fields': ('folio', 'propietario', 'proyecto', 'categoria')
+        }),
+        ('Ubicación', {
+            'fields': ('ubicacion_especifica',)
+        }),
+        ('Descripción del Problema', {
+            'fields': ('descripcion', 'tipo_garantia')
+        }),
+        ('Asignación', {
+            'fields': ('tecnico_asignado', 'estado')
+        }),
+        ('Fechas', {
+            'fields': (
+                'fecha_creacion',
+                'fecha_asignacion',
+                'fecha_primera_visita',
+                'fecha_estimada_resolucion',
+                'fecha_resolucion',
+                'fecha_cierre'
+            )
+        }),
+        ('Información Técnica', {
+            'fields': ('observaciones_tecnico', 'causa_raiz', 'solucion_aplicada'),
+            'classes': ('collapse',)
+        }),
+        ('Costos y Recursos', {
+            'fields': ('costo_estimado', 'costo_real', 'horas_trabajadas', 'materiales_utilizados'),
+            'classes': ('collapse',)
+        }),
+        ('Gestión de Escombros', {
+            'fields': ('requiere_retiro_escombros', 'estado_escombros', 'fecha_retiro_escombros'),
+            'classes': ('collapse',)
+        }),
+        ('Feedback del Propietario', {
+            'fields': ('comentarios_propietario', 'calificacion_propietario'),
+            'classes': ('collapse',)
+        }),
+    )
+    
+    
+    def badge_estado(self, obj):
+        """Muestra el estado con color"""
+        colores = {
+            'pendiente': '#6c757d',    # Gris
+            'asignado': '#17a2b8',     # Azul claro
+            'en_proceso': '#ffc107',   # Amarillo
+            'resuelto': '#28a745',     # Verde
+            'cerrado': '#007bff',      # Azul
+            'cancelado': '#dc3545',    # Rojo
+        }
+        return format_html(
+            '<span style="background-color: {}; color: white; padding: 3px 10px; border-radius: 3px;">{}</span>',
+            colores.get(obj.estado, '#6c757d'),
+            obj.get_estado_display()
+        )
+    badge_estado.short_description = 'Estado'
+
+
+# ========================================
+# CONFIGURACIÓN ADMIN: IMAGEN RECLAMO
+# ========================================
+@admin.register(ImagenReclamo)
+class ImagenReclamoAdmin(admin.ModelAdmin):
+    """
+    Configuración del panel admin para ImagenReclamo
+    """
+    list_display = ['reclamo', 'tipo', 'miniatura', 'subida_por', 'fecha_subida']
+    list_filter = ['tipo', 'subida_por', 'fecha_subida']
+    search_fields = ['reclamo__folio', 'descripcion']
+    readonly_fields = ['fecha_subida', 'preview']
+    
+    fieldsets = (
+        ('Reclamo', {
+            'fields': ('reclamo',)
+        }),
+        ('Imagen', {
+            'fields': ('imagen', 'preview', 'tipo', 'descripcion')
+        }),
+        ('Metadata', {
+            'fields': ('subida_por', 'fecha_subida')
+        }),
+    )
+    
+    def miniatura(self, obj):
+        """Muestra una miniatura de la imagen"""
+        if obj.imagen:
+            return format_html('<img src="{}" width="50" height="50" style="object-fit: cover;" />', obj.imagen.url)
+        return "Sin imagen"
+    miniatura.short_description = 'Miniatura'
+    
+    def preview(self, obj):
+        """Muestra un preview grande de la imagen"""
+        if obj.imagen:
+            return format_html('<img src="{}" width="300" style="border: 1px solid #ddd; padding: 5px;" />', obj.imagen.url)
+        return "Sin imagen"
+    preview.short_description = 'Preview'
+
+
+# ========================================
+# CONFIGURACIÓN ADMIN: DISPONIBILIDAD TECNICO
+# ========================================
+@admin.register(DisponibilidadTecnico)
+class DisponibilidadTecnicoAdmin(admin.ModelAdmin):
+    """
+    Configuración del panel admin para DisponibilidadTecnico
+    Permite gestionar horarios semanales de los técnicos (RF-10)
+    """
+    list_display = ['tecnico', 'dia_semana_display', 'hora_inicio', 'hora_fin', 'activo', 'badge_activo']
+    list_filter = ['dia_semana', 'activo', 'tecnico']
+    search_fields = ['tecnico__usuario__first_name', 'tecnico__usuario__last_name']
+    list_editable = ['activo']
+    
+    fieldsets = (
+        ('Técnico', {
+            'fields': ('tecnico',)
+        }),
+        ('Horario', {
+            'fields': ('dia_semana', 'hora_inicio', 'hora_fin')
+        }),
+        ('Estado', {
+            'fields': ('activo',)
+        }),
+    )
+    
+    def dia_semana_display(self, obj):
+        """Muestra el día de la semana en español"""
+        return obj.get_dia_semana_display()
+    dia_semana_display.short_description = 'Día'
+    dia_semana_display.admin_order_field = 'dia_semana'
+    
+    def badge_activo(self, obj):
+        """Badge de estado activo/inactivo"""
+        if obj.activo:
+            return format_html(
+                '<span style="background-color: #28a745; color: white; padding: 3px 10px; border-radius: 3px;">✓ Activo</span>'
+            )
+        return format_html(
+            '<span style="background-color: #dc3545; color: white; padding: 3px 10px; border-radius: 3px;">✗ Inactivo</span>'
+        )
+    badge_activo.short_description = 'Estado'
+
+
+# ========================================
+# CONFIGURACIÓN ADMIN: CITA
+# ========================================
+# ========================================
+# INLINE: BITÁCORA DE CITA
+# ========================================
+class BitacoraCitaInline(admin.TabularInline):
+    model = BitacoraCita
+    extra = 0
+    readonly_fields = ['fecha', 'accion', 'detalle', 'actor', 'old_fecha', 'old_hora_inicio', 'old_hora_fin', 'new_fecha', 'new_hora_inicio', 'new_hora_fin']
+    can_delete = False
+
+
+@admin.register(Cita)
+class CitaAdmin(admin.ModelAdmin):
+    """
+    Configuración del panel admin para Cita
+    Gestión de agendamientos (RF-05, RF-07, RF-08)
+    """
+    list_display = ['id', 'reclamo', 'tecnico_nombre', 'propietario_nombre', 'fecha_cita', 'hora_inicio', 'hora_fin', 'badge_estado', 'duracion_estimada']
+    list_filter = ['estado', 'fecha_cita', 'tecnico', 'fecha_creacion']
+    search_fields = ['reclamo__folio', 'tecnico__usuario__first_name', 'propietario__nombre']
+    readonly_fields = ['fecha_creacion', 'fecha_confirmacion', 'fecha_cancelacion']
+    date_hierarchy = 'fecha_cita'
+    
+    fieldsets = (
+        ('Información Básica', {
+            'fields': ('reclamo', 'tecnico', 'propietario')
+        }),
+        ('Fecha y Hora', {
+            'fields': ('fecha_cita', 'hora_inicio', 'hora_fin', 'duracion_estimada')
+        }),
+        ('Estado', {
+            'fields': ('estado', 'notas_cliente', 'notas_tecnico')
+        }),
+        ('Control', {
+            'fields': ('fecha_creacion', 'fecha_confirmacion', 'fecha_cancelacion', 'motivo_cancelacion'),
+            'classes': ('collapse',)
+        }),
+        ('Reprogramación', {
+            'fields': ('cita_original',),
+            'classes': ('collapse',)
+        }),
+    )
+    inlines = [BitacoraCitaInline]
+
+    def tecnico_nombre(self, obj):
+        """Nombre del técnico"""
+        return obj.tecnico.usuario.get_full_name() or obj.tecnico.usuario.username
+    tecnico_nombre.short_description = 'Técnico'
+    tecnico_nombre.admin_order_field = 'tecnico__usuario__first_name'
+    
+    def propietario_nombre(self, obj):
+        """Nombre del propietario"""
+        return obj.propietario.nombre
+    propietario_nombre.short_description = 'Propietario'
+    propietario_nombre.admin_order_field = 'propietario__nombre'
+    
+    def badge_estado(self, obj):
+        """Badge de estado con colores y etiquetas personalizadas"""
+        colores = {
+            'pendiente': '#6c757d',
+            'confirmada': '#28a745',
+            'en_curso': '#17a2b8',
+            'completada': '#007bff',
+            'cancelada': '#dc3545',
+            'reprogramada': '#ffc107',
+        }
+        # Etiquetas personalizadas: mostramos "Asignada" en vez de "Confirmada"
+        etiquetas = {
+            'pendiente': 'Pendiente',
+            'confirmada': 'Asignada',
+            'en_curso': 'En curso',
+            'completada': 'Completada',
+            'cancelada': 'Cancelada',
+            'reprogramada': 'Reprogramada',
+        }
+        return format_html(
+            '<span style="background-color: {}; color: white; padding: 3px 10px; border-radius: 3px; font-weight: 600;">{}</span>',
+            colores.get(obj.estado, '#6c757d'),
+            etiquetas.get(obj.estado, obj.get_estado_display())
+        )
+    badge_estado.short_description = 'Estado'
+    
+    actions = ['confirmar_citas', 'cancelar_citas']
+    
+    def confirmar_citas(self, request, queryset):
+        """Acción para confirmar múltiples citas"""
+        updated = 0
+        for cita in queryset:
+            if cita.estado == 'pendiente':
+                cita.confirmar()
+                updated += 1
+        self.message_user(request, f'{updated} cita(s) confirmada(s) exitosamente.', messages.SUCCESS)
+    confirmar_citas.short_description = 'Confirmar citas seleccionadas'
+    
+    def cancelar_citas(self, request, queryset):
+        """Acción para cancelar múltiples citas"""
+        updated = 0
+        for cita in queryset:
+            if cita.estado not in ['cancelada', 'completada']:
+                cita.cancelar('Cancelación masiva desde admin')
+                updated += 1
+        self.message_user(request, f'{updated} cita(s) cancelada(s).', messages.WARNING)
+    cancelar_citas.short_description = 'Cancelar citas seleccionadas'
+
+class BitacoraCitaInline(admin.TabularInline):
+    model = BitacoraCita
+    extra = 0
+    readonly_fields = ['fecha', 'accion', 'detalle', 'actor', 'old_fecha', 'old_hora_inicio', 'old_hora_fin', 'new_fecha', 'new_hora_inicio', 'new_hora_fin']
+    can_delete = False
+
+@admin.register(BitacoraCita)
+class BitacoraCitaAdmin(admin.ModelAdmin):
+    list_display = ['fecha', 'cita', 'reclamo', 'accion', 'actor']
+    list_filter = ['accion', 'fecha']
+    search_fields = ['reclamo__folio', 'cita__id', 'detalle', 'actor__username']
+    readonly_fields = ['fecha']
+
+
+
+# ========================================
+# CONFIGURACIÓN ADMIN: BLOQUEO CALENDARIO
+# ========================================
+@admin.register(BloqueoCalendario)
+class BloqueoCalendarioAdmin(admin.ModelAdmin):
+    """
+    Configuración del panel admin para BloqueoCalendario
+    Gestión de vacaciones, permisos y bloqueos (RF-10)
+    """
+    list_display = ['tecnico_nombre', 'tipo_badge', 'fecha_inicio', 'fecha_fin', 'motivo', 'duracion_dias', 'todo_el_dia']
+    list_filter = ['tipo', 'tecnico', 'fecha_inicio', 'todo_el_dia']
+    search_fields = ['tecnico__usuario__first_name', 'tecnico__usuario__last_name', 'motivo']
+    date_hierarchy = 'fecha_inicio'
+    
+    fieldsets = (
+        ('Técnico', {
+            'fields': ('tecnico',)
+        }),
+        ('Período', {
+            'fields': ('fecha_inicio', 'fecha_fin', 'todo_el_dia')
+        }),
+        ('Horario Específico', {
+            'fields': ('hora_inicio', 'hora_fin'),
+            'description': 'Solo si no es todo el día',
+            'classes': ('collapse',)
+        }),
+        ('Detalles', {
+            'fields': ('tipo', 'motivo')
+        }),
+    )
+
+    def tecnico_nombre(self, obj):
+        """Nombre del técnico"""
+        return obj.tecnico.usuario.get_full_name() or obj.tecnico.usuario.username
+    tecnico_nombre.short_description = 'Técnico'
+    tecnico_nombre.admin_order_field = 'tecnico__usuario__first_name'
+    
+    # (solo métodos de BloqueoCalendarioAdmin más abajo)
+    def tecnico_nombre(self, obj):
+        """Nombre del técnico"""
+        return obj.tecnico.usuario.get_full_name() or obj.tecnico.usuario.username
+    tecnico_nombre.short_description = 'Técnico'
+    tecnico_nombre.admin_order_field = 'tecnico__usuario__first_name'
+    
+    def tipo_badge(self, obj):
+        """Badge de tipo de bloqueo"""
+        colores = {
+            'vacaciones': '#17a2b8',
+            'permiso': '#ffc107',
+            'capacitacion': '#28a745',
+            'festivo': '#dc3545',
+            'otro': '#6c757d',
+        }
+        return format_html(
+            '<span style="background-color: {}; color: white; padding: 3px 10px; border-radius: 3px;">{}</span>',
+            colores.get(obj.tipo, '#6c757d'),
+            obj.get_tipo_display()
+        )
+    tipo_badge.short_description = 'Tipo'
+    
+    def duracion_dias(self, obj):
+        """Calcula la duración en días"""
+        delta = obj.fecha_fin - obj.fecha_inicio
+        return f"{delta.days + 1} día(s)"
+    duracion_dias.short_description = 'Duración'
+
+
+# ========================================
+# CONFIGURACIÓN ADMIN: MATERIAL
+# ========================================
+@admin.register(Material)
+class MaterialAdmin(admin.ModelAdmin):
+    """
+    Configuración del panel admin para Material
+    """
+    list_display = ['nombre', 'reclamo', 'cantidad', 'unidad', 'costo_unitario', 'get_costo_total', 'proveedor', 'fecha_uso']
+    search_fields = ['nombre', 'proveedor', 'reclamo__id', 'reclamo__descripcion']
+    list_filter = ['fecha_uso', 'unidad', 'proveedor']
+    readonly_fields = ['fecha_uso', 'get_costo_total']
+    date_hierarchy = 'fecha_uso'
+    
+    fieldsets = (
+        ('Información del Material', {
+            'fields': ('reclamo', 'nombre', 'cantidad', 'unidad')
+        }),
+        ('Costos', {
+            'fields': ('costo_unitario', 'get_costo_total', 'proveedor')
+        }),
+        ('Detalles', {
+            'fields': ('fecha_uso', 'observaciones')
+        }),
+    )
+    
+    def get_costo_total(self, obj):
+        """Muestra el costo total calculado"""
+        return f"${obj.costo_total:,.2f}" if obj.costo_total else "$0.00"
+    get_costo_total.short_description = 'Costo Total'
+
+
+# ========================================
+# CONFIGURACIÓN ADMIN: ESCOMBRO
+# ========================================
+@admin.register(Escombro)
+class EscombroAdmin(admin.ModelAdmin):
+    """
+    Configuración del panel admin para Escombro
+    """
+    list_display = ['reclamo', 'requiere_retiro', 'volumen_estimado', 'tipo_escombro', 'estado', 'badge_estado', 'fecha_retiro', 'empresa_retiro']
+    search_fields = ['reclamo__id', 'reclamo__descripcion', 'tipo_escombro', 'empresa_retiro']
+    list_filter = ['requiere_retiro', 'estado', 'tipo_escombro', 'fecha_programada', 'fecha_retiro']
+    readonly_fields = []
+    date_hierarchy = 'fecha_programada'
+    
+    fieldsets = (
+        ('Información del Escombro', {
+            'fields': ('reclamo', 'requiere_retiro', 'volumen_estimado', 'tipo_escombro')
+        }),
+        ('Gestión de Retiro', {
+            'fields': ('estado', 'fecha_programada', 'fecha_retiro', 'empresa_retiro', 'costo_retiro')
+        }),
+        ('Observaciones', {
+            'fields': ('observaciones',),
+            'classes': ('collapse',)
+        }),
+    )
+    
+    def badge_estado(self, obj):
+        """Badge de estado con color"""
+        colores = {
+            'pendiente': '#ffc107',
+            'programado': '#17a2b8',
+            'retirado': '#28a745',
+            'cancelado': '#dc3545'
+        }
+        return format_html(
+            '<span style="background-color: {}; color: white; padding: 3px 10px; border-radius: 3px;">{}</span>',
+            colores.get(obj.estado, '#6c757d'),
+            obj.get_estado_display()
+        )
+    badge_estado.short_description = 'Estado'
+
+
+# ========================================
+# CONFIGURACIÓN ADMIN: NOTIFICACION
+# ========================================
+@admin.register(Notificacion)
+class NotificacionAdmin(admin.ModelAdmin):
+    """
+    Configuración del panel admin para Notificacion (solo emails)
+    """
+    list_display = ['asunto', 'destinatario_info', 'estado', 'badge_estado', 'fecha_creacion', 'fecha_envio', 'intentos_envio']
+    search_fields = ['asunto', 'mensaje', 'propietario__nombre', 'tecnico__usuario__first_name', 'tecnico__usuario__last_name']
+    list_filter = ['estado', 'fecha_creacion', 'fecha_envio']
+    readonly_fields = ['fecha_creacion', 'fecha_envio', 'fecha_lectura', 'intentos_envio', 'error_mensaje']
+    date_hierarchy = 'fecha_creacion'
+    
+    fieldsets = (
+        ('Destinatario', {
+            'fields': ('propietario', 'tecnico', 'reclamo', 'cita'),
+            'description': 'Seleccione al menos un destinatario (propietario o técnico)'
+        }),
+        ('Contenido del Email', {
+            'fields': ('asunto', 'mensaje')
+        }),
+        ('Estado y Control', {
+            'fields': ('estado', 'fecha_creacion', 'fecha_envio', 'fecha_lectura', 'intentos_envio', 'error_mensaje')
+        }),
+    )
+    
+    def destinatario_info(self, obj):
+        """Muestra información del destinatario"""
+        if obj.propietario:
+            return format_html('<strong>Propietario:</strong> {}', obj.propietario.nombre)
+        elif obj.tecnico:
+            return format_html('<strong>Técnico:</strong> {}', obj.tecnico.usuario.get_full_name() or obj.tecnico.usuario.username)
+        return 'Sin destinatario'
+    destinatario_info.short_description = 'Destinatario'
+    
+    def badge_estado(self, obj):
+        """Badge de estado con color"""
+        colores = {
+            'pendiente': '#ffc107',
+            'enviada': '#17a2b8',
+            'fallida': '#dc3545',
+            'leida': '#28a745'
+        }
+        return format_html(
+            '<span style="background-color: {}; color: white; padding: 3px 10px; border-radius: 3px;">{}</span>',
+            colores.get(obj.estado, '#6c757d'),
+            obj.get_estado_display()
+        )
+    badge_estado.short_description = 'Estado'
+
+
+# ========================================
+# PERSONALIZACIÓN DEL ADMIN PRINCIPAL
+# ========================================
+admin.site.site_header = "Gestión de Postventa - Sistema Operativo"
+admin.site.site_title = "Panel Postventa"
+admin.site.index_title = "Administración de Reclamos y Postventa"
+
+# ========================================
+# REGISTROS EN ADMIN COMERCIAL (SUPERUSUARIOS)
+# ========================================
+# Mover gestión de usuarios Django y grupos al admin comercial
+admin.site.unregister(User)
+admin.site.unregister(Group)
+comercial_admin.register(User)
+comercial_admin.register(Group)

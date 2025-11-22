@@ -1,0 +1,171 @@
+{% extends 'base.html' %}
+{% load static %}
+{% load custom_filters %}
+
+{% block title %}Control de Materiales{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h3 mb-0" style="color: #1A4D4D;">
+                <i class="fas fa-cube"></i> Control de Materiales Usados
+            </h1>
+            <p class="text-muted small mt-2">Revisar materiales utilizados en reparaciones</p>
+        </div>
+    </div>
+
+    <!-- Tarjeta de información del supervisor -->
+    <div class="card border-start border-5 mb-4" style="border-start-color: #1A4D4D !important;">
+        <div class="card-body d-flex justify-content-between align-items-center">
+            <div>
+                <h6 class="card-title mb-1">
+                    <span class="badge" style="background-color: #1A4D4D;">SUPERVISOR</span>
+                </h6>
+                <p class="mb-0"><strong>{{ supervisor.usuario.first_name }} {{ supervisor.usuario.last_name }}</strong></p>
+                <small class="text-muted">{{ supervisor.proyecto.constructora.razon_social }}</small>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tarjeta de resumen de costos -->
+    <div class="card mb-4" style="border-top: 3px solid #1A4D4D;">
+        <div class="card-body">
+            <div class="row text-center">
+                <div class="col-md-4">
+                    <div>
+                        <h6 class="text-muted">Total de Visitas con Materiales</h6>
+                        <h3 style="color: #1A4D4D;">{{ visitas_con_materiales.count }}</h3>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div>
+                        <h6 class="text-muted">Costo Total de Materiales</h6>
+                        <h3 style="color: #1A4D4D;">${{ costo_total_materiales|floatformat:0 }}</h3>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div>
+                        <h6 class="text-muted">Tipos de Materiales Usados</h6>
+                        <h3 style="color: #1A4D4D;">{{ materiales_stats.count }}</h3>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tabla de materiales más usados -->
+    {% if materiales_stats %}
+        <div class="card mb-4">
+            <div class="card-header" style="background-color: #1A4D4D; color: white;">
+                <h6 class="mb-0">Materiales Más Utilizados</h6>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead style="background-color: #f8f9fa;">
+                        <tr>
+                            <th>Material</th>
+                            <th class="text-center">Unidad</th>
+                            <th class="text-center">Total Usado</th>
+                            <th class="text-center">Cantidad de Usos</th>
+                            <th class="text-center">Costo Unitario</th>
+                            <th class="text-center">Costo Total</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for stat in materiales_stats %}
+                            <tr>
+                                <td><strong>{{ stat.id_material__nombre }}</strong></td>
+                                <td class="text-center">{{ stat.id_material__unidad_medida|default:"-" }}</td>
+                                <td class="text-center">{{ stat.total_usado }}</td>
+                                <td class="text-center">
+                                    <span class="badge bg-info">{{ stat.cantidad_usos }}</span>
+                                </td>
+                                <td class="text-center">${{ stat.id_material__costo_unitario|floatformat:2 }}</td>
+                                <td class="text-center">
+                                    {% if stat.total_usado and stat.id_material__costo_unitario %}
+                                        <strong>${{ stat.total_usado|mul:stat.id_material__costo_unitario|floatformat:0 }}</strong>
+                                    {% else %}
+                                        -
+                                    {% endif %}
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    {% endif %}
+
+    <!-- Tabla de visitas técnicas con materiales -->
+    <h5 class="mb-3" style="color: #1A4D4D;">Detalle de Visitas Técnicas</h5>
+    {% if visitas_con_materiales %}
+        <div class="card">
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead style="background-color: #f8f9fa;">
+                        <tr>
+                            <th class="text-center">Visita ID</th>
+                            <th>Reclamo</th>
+                            <th>Propietario</th>
+                            <th>Técnico</th>
+                            <th class="text-center">Fecha Visita</th>
+                            <th class="text-center">Materiales Usados</th>
+                            <th class="text-center">Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for visita in visitas_con_materiales %}
+                            <tr>
+                                <td class="text-center">
+                                    <span class="badge bg-secondary">#{{ visita.id_visita }}</span>
+                                </td>
+                                <td>
+                                    <a href="{% url 'supervisor_detalle_reclamo' visita.id_reclamo.id_reclamo %}" class="text-decoration-none">
+                                        Reclamo #{{ visita.id_reclamo.id_reclamo }}
+                                    </a>
+                                </td>
+                                <td>{{ visita.id_reclamo.propietario.nombre }}</td>
+                                <td>{{ visita.id_tecnico.nombre }}</td>
+                                <td class="text-center">{{ visita.fecha_visita|date:"d/m/Y" }}</td>
+                                <td class="text-center">
+                                    <span class="badge bg-success">
+                                        {{ visita.usos_materiales.count }}
+                                    </span>
+                                </td>
+                                <td class="text-center">
+                                    <a href="{% url 'supervisor_detalle_materiales_visita' visita.id_visita %}" class="btn btn-sm btn-elegante">
+                                        <i class="fas fa-list"></i> Ver Detalle
+                                    </a>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    {% else %}
+        <div class="alert alert-info" role="alert">
+            <i class="fas fa-info-circle"></i> No hay visitas técnicas con materiales registrados en tu proyecto.
+        </div>
+    {% endif %}
+</div>
+
+{% load custom_filters %}
+
+<style>
+    .btn-elegante {
+        background: linear-gradient(135deg, #1A4D4D 0%, #2A6D6D 100%);
+        color: white;
+        border: none;
+        transition: all 0.3s ease;
+    }
+
+    .btn-elegante:hover {
+        background: linear-gradient(135deg, #0F3333 0%, #1A4D4D 100%);
+        color: white;
+        box-shadow: 0 4px 8px rgba(26, 77, 77, 0.3);
+    }
+</style>
+{% endblock %}

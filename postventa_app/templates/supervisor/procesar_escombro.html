@@ -1,0 +1,241 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Procesar Solicitud de Escombros - Postventa Pro{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <!-- Encabezado -->
+    <div class="row mb-4">
+        <div class="col">
+            <h4 class="mb-0"><i class="fas fa-trash"></i> Procesar Solicitud de Escombros</h4>
+            <p class="text-muted">Reclamo: <strong>#{{ reclamo.numero_folio }}</strong></p>
+        </div>
+    </div>
+
+    <!-- Información del Escombro -->
+    <div class="row mb-4">
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-header bg-light">
+                    <h5 class="mb-0">Detalles de la Solicitud</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label"><strong>Propietario:</strong></label>
+                            <p>{{ reclamo.propietario.nombre }}</p>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label"><strong>Tipo de Escombro:</strong></label>
+                            <p><span class="badge bg-secondary">{{ escombro.get_tipo_escombro_display }}</span></p>
+                        </div>
+                    </div>
+
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label"><strong>Volumen (m³):</strong></label>
+                            <p>{{ escombro.volumen_m3 }}</p>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label"><strong>Costo Estimado:</strong></label>
+                            <p>${{ escombro.costo|default:"Por determinar" }}</p>
+                        </div>
+                    </div>
+
+                    <div class="row mb-3">
+                        <div class="col-md-12">
+                            <label class="form-label"><strong>Ubicación Exacta:</strong></label>
+                            <p>{{ escombro.ubicacion_exacta }}</p>
+                        </div>
+                    </div>
+
+                    <div class="row mb-3">
+                        <div class="col-md-12">
+                            <label class="form-label"><strong>Observaciones Actuales:</strong></label>
+                            <p class="text-muted">{{ escombro.observaciones|default:"Sin observaciones" }}</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Formulario de Decisión -->
+    <div class="card mb-4">
+        <div class="card-header bg-light">
+            <h5 class="mb-0">Tomar Decisión</h5>
+        </div>
+        <div class="card-body">
+            <form method="post" id="procesarForm">
+                {% csrf_token %}
+
+                <!-- Selección de tipo de retiro -->
+                <div class="mb-4">
+                    <h6 class="mb-3"><i class="fas fa-dolly"></i> ¿Quién retirará los escombros?</h6>
+                    
+                    <div class="btn-group w-100" role="group">
+                        <input type="radio" class="btn-check" name="tipo_retiro" id="retiro_empresa" value="empresa" checked>
+                        <label class="btn btn-outline-primary" for="retiro_empresa">
+                            <i class="fas fa-building"></i> Empresa de Retiro
+                        </label>
+                        
+                        <input type="radio" class="btn-check" name="tipo_retiro" id="retiro_tecnicos" value="tecnicos">
+                        <label class="btn btn-outline-primary" for="retiro_tecnicos">
+                            <i class="fas fa-users"></i> Técnicos Internos
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Opción 1: Empresa de Retiro -->
+                <div id="seccion_empresa" class="mb-4">
+                    <h6 class="mb-3"><i class="fas fa-building"></i> Seleccionar Empresa</h6>
+                    
+                    {% if empresas_retiro %}
+                        <div class="table-responsive">
+                            <table class="table table-hover table-sm">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th width="50">Seleccionar</th>
+                                        <th>Empresa</th>
+                                        <th>Teléfono</th>
+                                        <th>Email</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for empresa in empresas_retiro %}
+                                        <tr>
+                                            <td>
+                                                <div class="form-check">
+                                                    <input class="form-check-input" type="radio" 
+                                                           name="empresa_retiro" value="{{ empresa.id_empresa }}"
+                                                           id="empresa_{{ empresa.id_empresa }}"
+                                                           {% if forloop.first %}checked{% endif %}>
+                                                </div>
+                                            </td>
+                                            <td>
+                                                <label for="empresa_{{ empresa.id_empresa }}" class="fw-bold">
+                                                    {{ empresa.nombre }}
+                                                </label>
+                                            </td>
+                                            <td>
+                                                <small class="text-muted">{{ empresa.telefono }}</small>
+                                            </td>
+                                            <td>
+                                                <small class="text-muted">{{ empresa.email }}</small>
+                                            </td>
+                                        </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    {% else %}
+                        <div class="alert alert-warning">
+                            <i class="fas fa-exclamation-triangle"></i> No hay empresas de retiro disponibles.
+                        </div>
+                    {% endif %}
+                </div>
+
+                <!-- Opción 2: Técnicos Internos -->
+                <div id="seccion_tecnicos" style="display: none;" class="mb-4">
+                    <h6 class="mb-3"><i class="fas fa-users"></i> Asignar Técnicos para el Retiro</h6>
+                    
+                    {% if tecnicos_disponibles %}
+                        <div class="table-responsive">
+                            <table class="table table-hover table-sm">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th width="50">Seleccionar</th>
+                                        <th>Técnico</th>
+                                        <th>Especialidad</th>
+                                        <th>Constructora</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for tecnico in tecnicos_disponibles %}
+                                        <tr>
+                                            <td>
+                                                <div class="form-check">
+                                                    <input class="form-check-input" type="checkbox" 
+                                                           name="tecnicos" value="{{ tecnico.id_tecnico }}"
+                                                           id="tecnico_{{ tecnico.id_tecnico }}"
+                                                           {% if tecnico.id_tecnico in tecnicos_asignados %}checked{% endif %}>
+                                                </div>
+                                            </td>
+                                            <td>
+                                                <label for="tecnico_{{ tecnico.id_tecnico }}">
+                                                    {{ tecnico.nombre }}
+                                                </label>
+                                            </td>
+                                            <td>
+                                                <span class="badge bg-secondary">{{ tecnico.especialidad.nombre }}</span>
+                                            </td>
+                                            <td>
+                                                <small class="text-muted">{{ tecnico.constructora.nombre }}</small>
+                                            </td>
+                                        </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    {% else %}
+                        <div class="alert alert-warning">
+                            <i class="fas fa-exclamation-triangle"></i> No hay técnicos disponibles en tu proyecto.
+                        </div>
+                    {% endif %}
+                </div>
+
+                <!-- Observaciones -->
+                <div class="mb-3">
+                    <label for="observaciones" class="form-label">Observaciones:</label>
+                    <textarea class="form-control" id="observaciones" name="observaciones" rows="4" 
+                              placeholder="Ingresa observaciones sobre la aprobación o rechazo..."></textarea>
+                    <small class="text-muted">Estas observaciones se guardarán en el registro.</small>
+                </div>
+
+                <!-- Botones de Acción -->
+                <div class="row">
+                    <div class="col-md-6">
+                        <button type="submit" name="accion" value="aprobar" class="btn btn-elegante w-100">
+                            <i class="fas fa-check-circle"></i> Aprobar Solicitud
+                        </button>
+                    </div>
+                    <div class="col-md-6">
+                        <button type="submit" name="accion" value="rechazar" class="btn btn-danger w-100"
+                                onclick="return confirm('¿Estás seguro de que deseas rechazar esta solicitud?');">
+                            <i class="fas fa-times-circle"></i> Rechazar Solicitud
+                        </button>
+                    </div>
+                </div>
+            </form>
+
+            <script>
+                // Mostrar/ocultar secciones según el tipo de retiro seleccionado
+                document.querySelectorAll('input[name="tipo_retiro"]').forEach(radio => {
+                    radio.addEventListener('change', function() {
+                        const seccionEmpresa = document.getElementById('seccion_empresa');
+                        const seccionTecnicos = document.getElementById('seccion_tecnicos');
+                        
+                        if (this.value === 'empresa') {
+                            seccionEmpresa.style.display = 'block';
+                            seccionTecnicos.style.display = 'none';
+                        } else {
+                            seccionEmpresa.style.display = 'none';
+                            seccionTecnicos.style.display = 'block';
+                        }
+                    });
+                });
+            </script>
+        </div>
+    </div>
+
+    <!-- Botón Volver -->
+    <div class="row">
+        <div class="col-md-12">
+            <a href="{% url 'supervisor_validar_escombros' %}" class="btn btn-elegante">
+                <i class="fas fa-arrow-left"></i> Volver a Validaciones
+            </a>
+        </div>
+    </div>
+</div>
+{% endblock %}

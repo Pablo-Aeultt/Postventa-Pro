@@ -1,0 +1,207 @@
+{% extends 'base.html' %}
+{% block title %}Historial de Citas - Técnico{% endblock %}
+
+{% block extra_css %}
+<style>
+:root { --color-primary:#1A4D4D; --color-secondary:#2A6D6D; }
+.card-custom { background:#fff; border-radius:18px; box-shadow:0 4px 14px rgba(0,0,0,0.08); border-left:4px solid var(--color-primary); overflow:hidden; margin-bottom:20px; }
+.card-header-custom { background:linear-gradient(135deg,var(--color-primary),var(--color-secondary)); color:#fff; padding:16px 24px; font-weight:600; display:flex; align-items:center; gap:10px; font-size:1.1rem; }
+.nav-pills .nav-link { color: var(--color-primary); border-radius: 10px; font-weight: 500; transition: all 0.3s ease; }
+.nav-pills .nav-link:hover { background: rgba(26,77,77,0.1); }
+.nav-pills .nav-link.active { background: var(--color-primary); color: white; box-shadow: 0 2px 8px rgba(26,77,77,0.3); }
+.btn-outline-primary { border: 2px solid var(--color-primary); color: var(--color-primary); font-weight: 600; border-radius: 10px; transition: all 0.3s ease; }
+.btn-outline-primary:hover { background: var(--color-primary); color: white; transform: translateY(-2px); box-shadow: 0 4px 12px rgba(26,77,77,0.2); }
+.table-hover tbody tr:hover { background-color: rgba(26,77,77,0.05); }
+
+.search-box { 
+  background: linear-gradient(135deg, rgba(26,77,77,0.08), rgba(42,109,109,0.08));
+  border-radius: 14px;
+  padding: 12px 16px;
+  border: 2px solid rgba(26,77,77,0.15);
+  backdrop-filter: blur(10px);
+  margin-bottom: 20px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+  max-width: 500px;
+}
+
+.search-box .form-control {
+  border: 2px solid var(--color-primary);
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-weight: 500;
+  background: white;
+  transition: all 0.3s ease;
+  font-size: 0.95rem;
+}
+
+.search-box .form-control:focus {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 2px rgba(26,77,77,0.1);
+  background: white;
+}
+
+.search-box .form-control::placeholder {
+  color: rgba(26,77,77,0.6);
+  font-weight: 500;
+  font-size: 0.9rem;
+}
+
+.btn-search {
+  background: var(--color-primary);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  padding: 8px 16px;
+  font-weight: 600;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.95rem;
+}
+
+.btn-search:hover {
+  background: var(--color-secondary);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(26,77,77,0.15);
+  color: white;
+}
+
+.btn-clear {
+  background: #6c757d;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  padding: 8px 14px;
+  font-weight: 600;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.9rem;
+}
+
+.btn-clear:hover {
+  background: #5a6268;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  color: white;
+  text-decoration: none;
+}
+
+.search-result-info {
+  font-size: 0.85rem;
+  color: rgba(26,77,77,0.8);
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+  <div class="d-flex align-items-center justify-content-between mb-3">
+    <div>
+      <h4 class="mb-0"><i class="bi bi-clock-history"></i> Historial de Citas</h4>
+      <small class="text-muted">Filtra por estado para ver diferentes tipos de citas</small>
+    </div>
+    <div class="d-flex gap-2">
+      <a href="{% url 'dashboard_tecnico' %}" class="btn btn-outline-primary"><i class="bi bi-speedometer"></i> Dashboard</a>
+    </div>
+  </div>
+
+  <div class="search-box">
+    <form method="GET" class="d-flex gap-2 align-items-end">
+      <div class="flex-grow-1">
+        <input type="text" name="busqueda" class="form-control" placeholder="Buscar por propietario o reclamo..." value="{{ busqueda }}">
+      </div>
+      <button type="submit" class="btn-search"><i class="bi bi-search"></i> Buscar</button>
+      {% if busqueda %}
+        <a href="{% url 'tecnico_historial_citas' %}?estado={{ estado }}" class="btn-clear"><i class="bi bi-x-circle"></i></a>
+      {% endif %}
+    </form>
+    {% if busqueda %}
+      <div class="search-result-info">
+        <i class="bi bi-info-circle"></i>
+        <span>Resultados para: <strong>{{ busqueda }}</strong></span>
+      </div>
+    {% endif %}
+  </div>
+
+  <ul class="nav nav-pills mb-3">
+    <li class="nav-item">
+      <a class="nav-link {% if estado == 'pendiente' %}active{% endif %}" href="{% url 'tecnico_historial_citas' %}?estado=pendiente{% if busqueda %}&busqueda={{ busqueda }}{% endif %}"><i class="bi bi-hourglass-split"></i> Pendientes</a>
+    </li>
+    <li class="nav-item">
+      <a class="nav-link {% if estado == 'completada' %}active{% endif %}" href="{% url 'tecnico_historial_citas' %}?estado=completada{% if busqueda %}&busqueda={{ busqueda }}{% endif %}"><i class="bi bi-check2-circle"></i> Completadas</a>
+    </li>
+    <li class="nav-item">
+      <a class="nav-link {% if estado == 'en_curso' %}active{% endif %}" href="{% url 'tecnico_historial_citas' %}?estado=en_curso{% if busqueda %}&busqueda={{ busqueda }}{% endif %}"><i class="bi bi-play-circle"></i> En curso</a>
+    </li>
+    <li class="nav-item">
+      <a class="nav-link {% if estado == 'cancelada' %}active{% endif %}" href="{% url 'tecnico_historial_citas' %}?estado=cancelada{% if busqueda %}&busqueda={{ busqueda }}{% endif %}"><i class="bi bi-x-circle"></i> Canceladas</a>
+    </li>
+    <li class="nav-item">
+      <a class="nav-link {% if estado == 'todas' %}active{% endif %}" href="{% url 'tecnico_historial_citas' %}?estado=todas{% if busqueda %}&busqueda={{ busqueda }}{% endif %}"><i class="bi bi-ui-checks"></i> Todas</a>
+    </li>
+  </ul>
+
+  <div class="card-custom">
+    <div class="card-header-custom">
+      <i class="bi bi-list-ul"></i>
+      <span>Registros de Citas</span>
+    </div>
+    <div class="card-body p-0">
+      <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+          <thead class="table-light">
+            <tr>
+              <th>Fecha</th>
+              <th>Hora</th>
+              <th>Propietario</th>
+              <th>Proyecto</th>
+              <th>Estado</th>
+              <th>Reclamo</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% if citas %}
+              {% for c in citas %}
+                <tr>
+                  <td>{{ c.fecha_programada|date:'d/m/Y' }}</td>
+                  <td>{{ c.fecha_programada|time:'H:i' }}</td>
+                  <td>{{ c.id_cliente.nombre }}</td>
+                  <td>{{ c.id_reclamo.proyecto.nombre }}</td>
+                  <td>
+                    {% if c.id_reclamo.estado == 'resuelto' %}
+                      <span class="badge" style="background: #d1e7dd; color: #0f5132; font-size: 0.9rem; padding: 6px 12px; font-weight: 600;">
+                        ✓ Resuelto
+                      </span>
+                    {% elif c.get_estado_display == 'Pendiente' %}
+                      <span class="badge" style="background: #fff3cd; color: #856404; font-size: 0.9rem; padding: 6px 12px; font-weight: 600;">{{ c.get_estado_display }}</span>
+                    {% elif c.get_estado_display == 'Confirmada' %}
+                      <span class="badge" style="background: #cfe2ff; color: #084298; font-size: 0.9rem; padding: 6px 12px; font-weight: 600;">{{ c.get_estado_display }}</span>
+                    {% elif c.get_estado_display == 'En curso' %}
+                      <span class="badge" style="background: #d1ecf1; color: #0c5460; font-size: 0.9rem; padding: 6px 12px; font-weight: 600;">{{ c.get_estado_display }}</span>
+                    {% elif c.get_estado_display == 'Completada' %}
+                      <span class="badge" style="background: #d1e7dd; color: #0f5132; font-size: 0.9rem; padding: 6px 12px; font-weight: 600;">{{ c.get_estado_display }}</span>
+                    {% else %}
+                      <span class="badge bg-light text-dark" style="font-size: 0.9rem; padding: 6px 12px; font-weight: 600;">{{ c.get_estado_display }}</span>
+                    {% endif %}
+                  </td>
+                  <td><a href="{% url 'tecnico_detalle_reclamo_cita' c.id_reclamo.id_reclamo c.id_cita %}" class="btn btn-sm btn-outline-primary"><i class="bi bi-link-45deg"></i> {{ c.id_reclamo.numero_folio }}</a></td>
+                </tr>
+              {% endfor %}
+            {% else %}
+              <tr><td colspan="6" class="text-center text-muted py-4"><i class="bi bi-inbox"></i> No hay registros para este filtro</td></tr>
+            {% endif %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

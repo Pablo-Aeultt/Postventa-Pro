@@ -1,0 +1,202 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Asignar Técnicos - Escombro {{ escombro.id_escombro }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h3 mb-0" style="color: #1A4D4D;">
+                <i class="fas fa-user-tie"></i> Asignar Técnicos
+            </h1>
+            <p class="text-muted small mt-2">Escombro #{{ escombro.id_escombro }} - Reclamo #{{ reclamo.id_reclamo }}</p>
+        </div>
+        <a href="{% url 'supervisor_asignar_escombros' %}" class="btn btn-outline-secondary">
+            <i class="fas fa-arrow-left"></i> Volver
+        </a>
+    </div>
+
+    <div class="row">
+        <!-- Columna de información del escombro -->
+        <div class="col-lg-4">
+            <!-- Información del escombro -->
+            <div class="card mb-4">
+                <div class="card-header" style="background-color: #1A4D4D; color: white;">
+                    <h6 class="mb-0">Detalles del Escombro</h6>
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <small class="text-muted">ID Escombro</small>
+                        <p class="mb-0"><strong>#{{ escombro.id_escombro }}</strong></p>
+                    </div>
+                    <div class="mb-3">
+                        <small class="text-muted">Tipo de Escombro</small>
+                        <p class="mb-0"><strong>{{ escombro.get_tipo_escombro_display }}</strong></p>
+                    </div>
+                    <div class="mb-3">
+                        <small class="text-muted">Volumen (m³)</small>
+                        <p class="mb-0"><strong>{{ escombro.volumen_m3 }}</strong></p>
+                    </div>
+                    <div class="mb-3">
+                        <small class="text-muted">Ubicación</small>
+                        <p class="mb-0"><small>{{ escombro.ubicacion_exacta|default:"No especificada" }}</small></p>
+                    </div>
+                    <div class="mb-3">
+                        <small class="text-muted">Fecha Programada</small>
+                        <p class="mb-0">
+                            {% if escombro.fecha_programada_retiro %}
+                                <strong>{{ escombro.fecha_programada_retiro|date:"d/m/Y" }}</strong>
+                            {% else %}
+                                <small class="text-muted">Por definir</small>
+                            {% endif %}
+                        </p>
+                    </div>
+                    {% if escombro.observaciones %}
+                        <div class="mb-3">
+                            <small class="text-muted">Observaciones</small>
+                            <p class="mb-0"><small>{{ escombro.observaciones }}</small></p>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Información del reclamo -->
+            <div class="card">
+                <div class="card-header" style="background-color: #1A4D4D; color: white;">
+                    <h6 class="mb-0">Reclamo Asociado</h6>
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <small class="text-muted">Reclamo ID</small>
+                        <p class="mb-0"><strong>#{{ reclamo.id_reclamo }}</strong></p>
+                    </div>
+                    <div class="mb-3">
+                        <small class="text-muted">Propietario</small>
+                        <p class="mb-0"><strong>{{ reclamo.propietario.nombre_completo }}</strong></p>
+                    </div>
+                    <div class="mb-3">
+                        <small class="text-muted">Falla Reportada</small>
+                        <p class="mb-0"><small>{{ reclamo.descripcion_falla|truncatewords:15 }}</small></p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Columna de asignación de técnicos -->
+        <div class="col-lg-8">
+            <div class="card">
+                <div class="card-header" style="background-color: #1A4D4D; color: white;">
+                    <h6 class="mb-0">Seleccionar Técnicos para Asignar</h6>
+                </div>
+                <div class="card-body">
+                    <form method="POST">
+                        {% csrf_token %}
+
+                        {% if tecnicos_disponibles %}
+                            <div class="table-responsive">
+                                <table class="table table-hover">
+                                    <thead style="background-color: #f8f9fa;">
+                                        <tr>
+                                            <th class="text-center" style="width: 50px;">
+                                                <input type="checkbox" id="select_all" class="form-check-input">
+                                            </th>
+                                            <th>Técnico</th>
+                                            <th>Especialidad</th>
+                                            <th class="text-center">Asignaciones Activas</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for tecnico in tecnicos_disponibles %}
+                                            <tr>
+                                                <td class="text-center">
+                                                    <input type="checkbox" name="tecnicos" value="{{ tecnico.id_tecnico }}" 
+                                                           class="form-check-input tecnico-checkbox"
+                                                           {% if tecnico.id_tecnico in tecnicos_asignados %}checked{% endif %}>
+                                                </td>
+                                                <td>
+                                                    <strong>{{ tecnico.nombre }}</strong>
+                                                    <br>
+                                                    <small class="text-muted">RUT: {{ tecnico.rut }}</small>
+                                                </td>
+                                                <td>
+                                                    {% if tecnico.especialidad %}
+                                                        <span class="badge" style="background-color: #E8F4F8; color: #1A4D4D;">
+                                                            {{ tecnico.especialidad.nombre }}
+                                                        </span>
+                                                    {% else %}
+                                                        <small class="text-muted">Sin especialidad</small>
+                                                    {% endif %}
+                                                </td>
+                                                <td class="text-center">
+                                                    <span class="badge bg-info">
+                                                        {{ tecnico.asignaciones_escombros.count }}
+                                                    </span>
+                                                </td>
+                                            </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            <!-- Botones de acción -->
+                            <div class="d-flex gap-2 mt-4">
+                                <button type="submit" class="btn btn-elegante">
+                                    <i class="fas fa-check"></i> Guardar Asignación
+                                </button>
+                                <a href="{% url 'supervisor_asignar_escombros' %}" class="btn btn-outline-secondary">
+                                    <i class="fas fa-times"></i> Cancelar
+                                </a>
+                            </div>
+
+                        {% else %}
+                            <div class="alert alert-warning" role="alert">
+                                <i class="fas fa-exclamation-triangle"></i> No hay técnicos disponibles en tu proyecto.
+                            </div>
+                        {% endif %}
+
+                        {% if asignaciones_existentes %}
+                            <hr>
+                            <h6 class="mb-3">Técnicos Actualmente Asignados:</h6>
+                            <div class="d-flex flex-wrap gap-2">
+                                {% for asignacion in asignaciones_existentes %}
+                                    <div class="badge bg-success p-2">
+                                        {{ asignacion.id_tecnico.nombre }}
+                                        <br>
+                                        <small>Estado: {{ asignacion.get_estado_display }}</small>
+                                    </div>
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .btn-elegante {
+        background: linear-gradient(135deg, #1A4D4D 0%, #2A6D6D 100%);
+        color: white;
+        border: none;
+        transition: all 0.3s ease;
+    }
+
+    .btn-elegante:hover {
+        background: linear-gradient(135deg, #0F3333 0%, #1A4D4D 100%);
+        color: white;
+        box-shadow: 0 4px 8px rgba(26, 77, 77, 0.3);
+    }
+</style>
+
+<script>
+    document.getElementById('select_all').addEventListener('change', function() {
+        const checkboxes = document.querySelectorAll('.tecnico-checkbox');
+        checkboxes.forEach(checkbox => {
+            checkbox.checked = this.checked;
+        });
+    });
+</script>
+{% endblock %}

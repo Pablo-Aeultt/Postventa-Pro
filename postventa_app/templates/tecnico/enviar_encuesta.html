@@ -1,0 +1,184 @@
+{% extends 'base.html' %}
+{% block title %}Enviar Encuesta de Satisfacción{% endblock %}
+
+{% block extra_css %}
+<style>
+:root {
+    --color-primary: #1a4d4d;
+    --color-secondary: #2a6d6d;
+}
+
+.card-custom {
+    background: #fff;
+    border-radius: 18px;
+    box-shadow: 0 4px 14px rgba(0,0,0,0.08);
+    border-left: 4px solid var(--color-primary);
+    overflow: hidden;
+}
+
+.card-header-custom {
+    background: linear-gradient(135deg, var(--color-primary), var(--color-secondary));
+    color: white;
+    padding: 16px 24px;
+    font-size: 1.1rem;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.form-label {
+    font-weight: 600;
+    color: var(--color-primary);
+}
+
+.form-control:focus {
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 0.2rem rgba(26, 77, 77, 0.25);
+}
+
+.btn-submit {
+    background: linear-gradient(135deg, var(--color-primary), var(--color-secondary));
+    border: none;
+    color: white;
+    font-weight: 600;
+    padding: 12px 30px;
+    border-radius: 10px;
+    transition: all 0.3s;
+}
+
+.btn-submit:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(26, 77, 77, 0.3);
+    color: white;
+}
+
+.info-box {
+    background: #e7f3f8;
+    border-left: 4px solid var(--color-primary);
+    padding: 15px 20px;
+    border-radius: 8px;
+    margin-bottom: 20px;
+}
+
+.info-box strong {
+    color: var(--color-primary);
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+    <div class="row mb-4">
+        <div class="col">
+            <h2><i class="bi bi-chat-left-quote"></i> Enviar Encuesta de Satisfacción</h2>
+            <p class="text-muted">Reclamo: <strong>{{ reclamo.numero_folio }}</strong></p>
+        </div>
+        <div class="col-auto">
+            <a href="{% url 'tecnico_detalle_reclamo' reclamo.id_reclamo %}" class="btn btn-outline-primary">
+                <i class="bi bi-arrow-left"></i> Volver
+            </a>
+        </div>
+    </div>
+
+    <div class="card-custom">
+        <div class="card-header-custom">
+            <i class="bi bi-send-check"></i>
+            Información de la Encuesta
+        </div>
+        <div class="card-body">
+            <div class="info-box">
+                <i class="bi bi-info-circle"></i>
+                <strong>Información:</strong> Se enviará un email al propietario con el link de la encuesta.
+                Asegúrate de proporcionar un URL válido (Google Forms, Typeform, etc.)
+            </div>
+
+            <form method="post">
+                {% csrf_token %}
+
+                <div class="row mb-4">
+                    <div class="col-md-6">
+                        <label class="form-label">Propietario</label>
+                        <input type="text" class="form-control" value="{{ reclamo.id_cliente.nombre }}" disabled>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Email</label>
+                        <input type="email" class="form-control" value="{{ reclamo.id_cliente.email }}" disabled>
+                    </div>
+                </div>
+
+                <div class="mb-4">
+                    <label for="link_encuesta" class="form-label">
+                        <i class="bi bi-link-45deg"></i> Link de la Encuesta
+                    </label>
+                    <input 
+                        type="url" 
+                        class="form-control" 
+                        id="link_encuesta" 
+                        name="link_encuesta" 
+                        placeholder="https://forms.google.com/..."
+                        required
+                    >
+                    <small class="text-muted">
+                        Ejemplo: https://forms.google.com/forms/d/e/1FAIpQLSd...
+                    </small>
+                </div>
+
+                <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+                    <a href="{% url 'tecnico_detalle_reclamo' reclamo.id_reclamo %}" class="btn btn-outline-secondary">
+                        <i class="bi bi-x-circle"></i> Cancelar
+                    </a>
+                    <button type="submit" class="btn btn-submit">
+                        <i class="bi bi-send"></i> Enviar Encuesta
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="card-custom mt-4">
+        <div class="card-header-custom">
+            <i class="bi bi-question-circle"></i>
+            ¿Cómo crear una encuesta?
+        </div>
+        <div class="card-body">
+            <div class="accordion" id="accordionFAQ">
+                <div class="accordion-item">
+                    <h2 class="accordion-header">
+                        <button class="accordion-button" type="button" data-bs-toggle="collapse" data-bs-target="#faqGoogle">
+                            Google Forms
+                        </button>
+                    </h2>
+                    <div id="faqGoogle" class="accordion-collapse collapse show" data-bs-parent="#accordionFAQ">
+                        <div class="accordion-body">
+                            <ol>
+                                <li>Accede a <a href="https://forms.google.com" target="_blank">forms.google.com</a></li>
+                                <li>Crea un nuevo formulario con preguntas sobre la satisfacción</li>
+                                <li>Haz clic en "Enviar" y copia el link compartible</li>
+                                <li>Pega el link aquí</li>
+                            </ol>
+                        </div>
+                    </div>
+                </div>
+                <div class="accordion-item">
+                    <h2 class="accordion-header">
+                        <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faqTypeform">
+                            Typeform
+                        </button>
+                    </h2>
+                    <div id="faqTypeform" class="accordion-collapse collapse" data-bs-parent="#accordionFAQ">
+                        <div class="accordion-body">
+                            <ol>
+                                <li>Accede a <a href="https://www.typeform.com" target="_blank">typeform.com</a></li>
+                                <li>Crea un nuevo formulario</li>
+                                <li>Haz clic en "Share" y copia el link público</li>
+                                <li>Pega el link aquí</li>
+                            </ol>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

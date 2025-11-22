@@ -1,0 +1,389 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Iniciar Sesión - Postventa Pro{% endblock %}
+
+{% block extra_css %}
+<style>
+    .form-floating-custom.active label {
+        top: 0;
+        left: 12px;
+        transform: none;
+        color: var(--color-primary);
+        font-weight: 600;
+        font-size: 13px;
+    }
+    .main-content {
+        flex: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 0;
+        padding: 0;
+    }
+    body {
+        display: flex;
+        flex-direction: column;
+        min-height: 100vh;
+    }
+    .main-content {
+        flex: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 10px 20px;
+        min-height: 0;
+    }
+    :root {
+        --color-primary: #1A4D4D;
+        --color-secondary: #2A6D6D;
+        --color-accent: #FFD700;
+    }
+    * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+    }
+    body {
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        background: linear-gradient(135deg, #ffffffff 0%, #eeffffff 100%);
+        min-height: 100vh;
+        padding: 0;
+    }
+    
+    .navbar-custom {
+        flex-shrink: 0;
+        padding: 8px 0 !important;
+    }
+    
+    .navbar-custom .navbar-brand {
+        font-size: 20px !important;
+    }
+    
+    .navbar-custom .navbar-brand i {
+        font-size: 24px !important;
+    }
+    
+    .main-content {
+        flex: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 10px 20px;
+        overflow: hidden;
+        min-height: 0;
+    }
+    
+    .footer-custom {
+        flex-shrink: 0;
+        padding: 10px 0 !important;
+        font-size: 12px;
+    }
+        
+        .login-container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+            overflow: hidden;
+            max-width: 450px;
+            width: 100%;
+        }
+        
+        .login-header {
+            background: linear-gradient(135deg, #1A4D4D 0%, #2A6D6D 100%);
+            color: white;
+            padding: 35px 30px;
+            text-align: center;
+        }
+        
+        .login-header i {
+            font-size: 48px;
+            margin-bottom: 10px;
+        }
+        
+        .login-header h1 {
+            font-size: 27px;
+            font-weight: 700;
+            margin-bottom: 8px;
+        }
+        
+        .login-header p {
+            opacity: 0.9;
+            margin: 0;
+            font-size: 15px;
+        }
+        
+        .login-body {
+            padding: 35px 30px;
+        }
+
+        /* Más espacio entre los inputs */
+        .login-body .mb-3 {
+            margin-bottom: 24px !important;
+        }
+        
+        .form-label {
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 8px;
+        }
+        
+        .form-control {
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            padding: 12px;
+            transition: all 0.3s;
+        }
+        
+        .form-control:focus {
+            border-color: var(--color-secondary);
+            box-shadow: 0 0 0 0.2rem rgba(42, 109, 109, 0.25);
+        }
+        
+        .input-group-text {
+            background-color: #f8f9fa;
+            border: 2px solid #e0e0e0;
+            border-right: none;
+        }
+        
+        .input-group .form-control {
+            border-left: none;
+        }
+        
+        .btn-login {
+            background: linear-gradient(135deg, #1A4D4D 0%, #2A6D6D 100%);
+            color: white;
+            border: none;
+            padding: 12px;
+            font-weight: 600;
+            border-radius: 10px;
+            transition: all 0.3s;
+        }
+        
+        .btn-login:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(26, 77, 77, 0.3);
+            color: white;
+        }
+        
+        .btn-toggle-password {
+            background: #f8f9fa;
+            border: 2px solid #e0e0e0;
+            border-left: none;
+            border-radius: 0 10px 10px 0;
+            color: #6c757d;
+            cursor: pointer;
+            padding: 10px 15px;
+            transition: all 0.3s;
+        }
+        
+        .btn-toggle-password:hover {
+            color: var(--color-primary);
+            background: #e9ecef;
+        }
+        
+        .register-link {
+            text-align: center;
+            margin-top: 20px;
+            padding-top: 20px;
+            border-top: 1px solid #e0e0e0;
+        }
+        
+        .alert {
+            border-radius: 10px;
+        }
+
+       /* === FLOATING LABEL STYLES CORREGIDAS === */
+.form-floating {
+    position: relative;
+}
+
+.form-floating .left-icon {
+    position: absolute;
+    left: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #1A4D4D;
+    font-size: 18px;
+    pointer-events: none;
+}
+
+.form-floating .form-control.with-left-icon {
+    padding-left: 38px;
+}
+
+.form-floating .form-control.with-right-icon {
+    padding-right: 44px;
+}
+
+/* Label base */
+.form-floating label {
+    padding-left: 35px; /* deja espacio al ícono */
+    transition: transform .25s ease, color .25s ease, opacity .25s ease, padding-left .25s ease;
+    pointer-events: none;
+}
+
+/* Cuando el label flota */
+.form-floating > .form-control:focus ~ label,
+.form-floating > .form-control:not(:placeholder-shown) ~ label {
+    transform: scale(.85) translateY(-1.75rem);
+    padding-left: 12px;
+    color: var(--color-primary);
+    opacity: .95;
+}
+
+
+
+
+        .form-floating .password-toggle-btn {
+            position: absolute;
+            right: 10px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: none;
+            border: none;
+            color: #6c757d;
+            cursor: pointer;
+            padding: 0 10px;
+            transition: color 0.3s;
+            z-index: 10;
+            font-size: 18px;
+            line-height: 1;
+        }
+        .form-floating .password-toggle-btn:hover { color: var(--color-primary); }
+        .help-text { font-size: 11px; color: #6c757d; display: block; }
+        /* Mensajes bajo el campo: ayuda y error alineados y con buen espaciado */
+        .login-body .mb-3 .help-text,
+        .login-body .mb-3 .error-text {
+            display: block;
+            margin-top: 6px;
+            padding-left: 26px; /* alinea con inicio de la etiqueta cuando hay icono */
+        }
+
+.form-floating .form-control {
+    height: 50px !important;          
+    padding-top: 0px !important;     
+    padding-bottom: 0 !important;     
+    padding-left: 38px !important;    
+    padding-right: 44px !important;  
+    line-height: 1.2 !important;
+}
+
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="login-container">
+    <div class="login-header">
+        <i class="bi bi-shield-lock"></i>
+        <h1>PostVenta Pro</h1>
+        <p>Accede a tu cuenta de usuario</p>
+    </div>
+    
+    <div class="login-body">
+        <form method="post" novalidate autocomplete="off">
+            {% csrf_token %}
+
+            <!-- Usuario - Floating label con icono a la izquierda -->
+            <div class="mb-3">
+                <div class="form-floating">
+                    <span class="left-icon"><i class="bi bi-person-circle"></i></span>
+                    <input
+                        type="text"
+                        name="username"
+                        id="id_username"
+                        class="form-control with-left-icon"
+                        placeholder=" "
+                        autocomplete="off"
+                        required
+                    >
+                    <label for="id_username"> RUT o Email</label>
+                </div>
+                <small class="help-text">Ingresa tu RUT (con o sin formato) o tu email</small>
+                {% if form.username.errors %}
+                    <div class="error-text text-danger small mt-1">{{ form.username.errors.0 }}</div>
+                {% endif %}
+            </div>
+
+            <!-- Contraseña - Floating label con icono a la izquierda y botón ojo a la derecha -->
+            <div class="mb-3">
+                <div class="form-floating">
+                    <span class="left-icon"><i class="bi bi-lock-fill"></i></span>
+                    <input
+                        type="password"
+                        name="password"
+                        id="id_password"
+                        class="form-control with-left-icon with-right-icon"
+                        placeholder=" "
+                        autocomplete="new-password"
+                        required
+                    >
+                    <label for="id_password"> Contraseña</label>
+                    <button type="button" class="password-toggle-btn" onclick="togglePassword()" aria-label="Mostrar contraseña">
+                        <i class="bi bi-eye" id="toggle-icon"></i>
+                    </button>
+                </div>
+                <small class="help-text">¿Has olvidado tu contraseña?</small>
+                {% if form.password.errors %}
+                    <div class="error-text text-danger small mt-1">{{ form.password.errors.0 }}</div>
+                {% endif %}
+            </div>
+            {% if form.non_field_errors %}
+                <div class="alert alert-danger mt-3" role="alert">
+                    RUT/Email o Contraseña incorrectos
+                </div>
+            {% endif %}
+
+            <button type="submit" class="btn btn-login w-100">
+                Iniciar Sesión
+            </button>
+        </form>
+        
+        <div class="register-link">
+            <p class="mb-0 text-muted small" style="text-align:center;">
+                <i class="bi bi-info-circle"></i> ¿No tienes credenciales? 
+                Contacta a tu inmobiliaria para obtener acceso.
+            </p>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+    const passwordInput = document.getElementById('id_password');
+    const toggleButton = document.querySelector('.password-toggle-btn');
+    const toggleIcon = document.getElementById('toggle-icon');
+
+    // Evita que el botón quite el foco
+    toggleButton.addEventListener("mousedown", (e) => e.preventDefault());
+
+    toggleButton.addEventListener("click", () => {
+        // Guarda la posición actual del cursor
+        const start = passwordInput.selectionStart;
+        const end = passwordInput.selectionEnd;
+        const wasFocused = document.activeElement === passwordInput;
+
+        // Cambia el tipo del campo
+        const isHidden = passwordInput.type === 'password';
+        passwordInput.type = isHidden ? 'text' : 'password';
+        toggleIcon.className = isHidden ? 'bi bi-eye-slash' : 'bi bi-eye';
+
+        // 🔹 Usa requestAnimationFrame para aplicar la restauración justo después del cambio
+        requestAnimationFrame(() => {
+            if (wasFocused) {
+                passwordInput.focus();
+                passwordInput.setSelectionRange(start, end);
+            }
+        });
+    });
+});
+</script>
+<script>
+    // Evita volver atrás al login si el usuario está autenticado
+    if (window.history && window.history.replaceState) {
+        window.history.replaceState(null, '', window.location.href);
+    }
+</script>
+{% endblock %}

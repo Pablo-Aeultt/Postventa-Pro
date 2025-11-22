@@ -1,0 +1,1183 @@
+from django.shortcuts import render, redirect, get_object_or_404
+from django.contrib import messages
+from django.contrib.auth import login, logout, authenticate
+from django.contrib.auth.decorators import login_required
+from django.http import HttpResponse, JsonResponse
+from django.db.models import Q
+from datetime import datetime, timedelta
+from .models import Reclamo, ImagenReclamo, Propietario, Tecnico, DisponibilidadTecnico, Categoria, Proyecto
+from .forms import ReclamoForm, ImagenReclamoFormSet, RegistroPropietarioForm, LoginForm, ReclamoAutenticadoForm
+from django.utils import timezone
+from django.views.decorators.http import require_http_methods
+
+
+def get_propietario_from_user(user):
+    """Intenta resolver el Propietario asociado a un objeto auth.User sin usar la relación inversa.
+
+    Estrategia:
+    - Intentar buscar por email (email es único por propietario habitualmente).
+    - Si no, intentar emparejar el username del User con el RUT (limpio) de un Propietario.
+    - Retorna None si no se encuentra.
+    """
+    if not user or not getattr(user, 'is_authenticated', False):
+        return None
+
+    try:
+        return Propietario.objects.get(email__iexact=(user.email or ''))
+    except Propietario.DoesNotExist:
+        pass
+
+    # Comparar username (posible RUT limpio) con rut de propietarios
+    username = (getattr(user, 'username', '') or '').strip()
+    username_clean = username.replace('.', '').replace('-', '')
+    if username_clean:
+        for p in Propietario.objects.all():
+            if (p.rut or '').replace('.', '').replace('-', '').lower() == username_clean.lower():
+                return p
+
+    return None
+
+
+# ========================================
+# VISTAS DE AUTENTICACIÓN
+# ========================================
+
+def registro_propietario(request):
+    """Vista para registro de nuevos propietarios"""
+    if request.method == 'POST':
+        form = RegistroPropietarioForm(request.POST)
+        if form.is_valid():
+            user = form.save()
+            login(request, user)  # Login automático después del registro
+            messages.success(
+                request,
+                f'¡Bienvenido {user.username}! Tu cuenta ha sido creada exitosamente.'
+            )
+            return redirect('crear_reclamo')
+        else:
+            messages.error(
+                request,
+                'Por favor corrija los errores en el formulario.'
+            )
+    else:
+        form = RegistroPropietarioForm()
+    
+    return render(request, 'postventa_app/registro.html', {'form': form})
+
+
+def login_propietario(request):
+    """Vista para login de propietarios"""
+    if request.method == 'POST':
+        form = LoginForm(data=request.POST)
+        if form.is_valid():
+            username = form.cleaned_data.get('username')
+            password = form.cleaned_data.get('password')
+            user = authenticate(username=username, password=password)
+            if user is not None:
+                login(request, user)
+                # Priorizar flujo de TÉCNICO si el usuario tiene perfil de técnico
+                tecnico = get_tecnico_from_user(user)
+                if tecnico is not None:
+                    return redirect('tecnico_dashboard')
+
+                # Flujo PROPIETARIO
+                propietario = get_propietario_from_user(user)
+                if propietario:
+                    tiene_reclamos = Reclamo.objects.filter(propietario=propietario).exists()
+                    return redirect('mis_reclamos' if tiene_reclamos else 'crear_reclamo')
+
+                # Fallback: si no se identifica rol, ir al login con aviso
+                messages.warning(request, 'Tu cuenta no está asociada a propietario ni técnico. Contacta al administrador.')
+                return redirect('login')
+            else:
+                form.add_error(None, 'Usuario o contraseña incorrectos.')
+        else:
+            # Los errores de validación de campos se mostrarán bajo los inputs
+            pass
+    else:
+        form = LoginForm()
+    return render(request, 'postventa_app/login.html', {'form': form})
+
+
+def logout_propietario(request):
+    """Vista para logout"""
+    logout(request)
+    messages.info(request, 'Has cerrado sesión exitosamente.')
+    return redirect('login')
+
+
+# ========================================
+# VISTAS DE RECLAMOS
+# ========================================
+
+@login_required(login_url='login')
+def crear_reclamo(request):
+    """
+    Vista para crear un nuevo reclamo (solo usuarios autenticados)
+    """
+    propietario = get_propietario_from_user(request.user)
+    if propietario is None:
+        messages.error(
+            request,
+            'Tu cuenta no está asociada a un propietario. Contacta al administrador.'
+        )
+        return redirect('login')
+    
+    if request.method == 'POST':
+        form = ReclamoAutenticadoForm(request.POST, propietario=propietario)
+        formset = ImagenReclamoFormSet(request.POST, request.FILES)
+        
+        if form.is_valid() and formset.is_valid():
+            # Guardar el reclamo
+            reclamo = form.save(commit=False, propietario=propietario)
+            reclamo.estado = 'pendiente'
+            reclamo.save()
+            
+            # Guardar las imágenes asociadas
+            formset.instance = reclamo
+            formset.save()
+            
+            # Verificar si se seleccionó técnico y horario (vía JavaScript)
+            tecnico_id = request.POST.get('tecnico_id')
+            fecha_cita = request.POST.get('fecha_cita')
+            hora_inicio = request.POST.get('hora_inicio')
+            hora_fin = request.POST.get('hora_fin')
+            
+            if tecnico_id and fecha_cita and hora_inicio and hora_fin:
+                # Crear la cita directamente
+                from .models import Cita
+                from datetime import datetime
+                
+                tecnico = Tecnico.objects.get(id=tecnico_id)
+                
+                # Convertir strings a objetos datetime
+                fecha_obj = datetime.strptime(fecha_cita, '%Y-%m-%d').date()
+                hora_inicio_obj = datetime.strptime(hora_inicio, '%H:%M:%S').time()
+                hora_fin_obj = datetime.strptime(hora_fin, '%H:%M:%S').time()
+                
+                # VALIDAR: Verificar que el horario NO esté ocupado
+                cita_existente = Cita.objects.filter(
+                    tecnico=tecnico,
+                    fecha_cita=fecha_obj,
+                    hora_inicio=hora_inicio_obj,
+                    hora_fin=hora_fin_obj,
+                    estado__in=['pendiente', 'confirmada', 'en_curso']  # Ignorar canceladas/completadas
+                ).exists()
+                
+                if cita_existente:
+                    messages.warning(
+                        request,
+                        f'⚠️ El horario seleccionado ya no está disponible. '
+                        f'Por favor selecciona otro horario o tu reclamo será asignado manualmente.'
+                    )
+                    # No crear cita, pero el reclamo sí se crea
+                else:
+                    # Crear la cita ya confirmada
+                    cita = Cita.objects.create(
+                        reclamo=reclamo,
+                        tecnico=tecnico,
+                        propietario=propietario,
+                        fecha_cita=fecha_obj,
+                        hora_inicio=hora_inicio_obj,
+                        hora_fin=hora_fin_obj,
+                        estado='confirmada',
+                        fecha_confirmacion=timezone.now(),
+                        notas_cliente=f'Cita agendada desde formulario de reclamo'
+                    )
+                    
+                    # Asignar técnico al reclamo
+                    from datetime import datetime as _dt
+                    reclamo.tecnico_asignado = tecnico
+                    reclamo.estado = 'asignado'
+                    # Fecha de asignación si no existe
+                    if not reclamo.fecha_asignacion:
+                        reclamo.fecha_asignacion = timezone.now()
+                    # Fecha primera visita si no existe
+                    if not reclamo.fecha_primera_visita:
+                        try:
+                            visita_dt = _dt.combine(fecha_obj, hora_inicio_obj)
+                            visita_dt = timezone.make_aware(visita_dt, timezone.get_current_timezone())
+                            reclamo.fecha_primera_visita = visita_dt
+                        except Exception:
+                            pass
+                    reclamo.save(update_fields=['tecnico_asignado', 'estado', 'fecha_asignacion', 'fecha_primera_visita'])
+                    
+                    messages.success(
+                        request, 
+                        f'¡Reclamo #{reclamo.folio} creado y cita agendada! '
+                        f'Tu cita con {tecnico.usuario.get_full_name()} es el {fecha_obj.strftime("%d/%m/%Y")} a las {hora_inicio_obj.strftime("%H:%M")}.'
+                    )
+            else:
+                messages.success(
+                    request, 
+                    f'Reclamo #{reclamo.folio} creado exitosamente. '
+                    f'Será asignado a un técnico pronto.'
+                )
+            
+            return redirect('mis_reclamos')
+        else:
+            # Mostrar errores específicos del formulario y formset
+            if not form.is_valid():
+                for field, errors in form.errors.items():
+                    for error in errors:
+                        messages.error(request, f'{form.fields[field].label if field in form.fields else field}: {error}')
+            
+            if not formset.is_valid():
+                # Errores generales del formset (como min_num)
+                for error in formset.non_form_errors():
+                    messages.error(request, f'Archivos: {error}')
+                
+                # Errores específicos de cada formulario
+                for i, form_errors in enumerate(formset.errors):
+                    if form_errors:
+                        for field, errors in form_errors.items():
+                            for error in errors:
+                                messages.error(request, f'Archivo {i+1} - {field}: {error}')
+            
+            if not form.errors and not formset.errors:
+                messages.error(request, 'Por favor corrija los errores en el formulario.')
+    else:
+        form = ReclamoAutenticadoForm(propietario=propietario)
+        formset = ImagenReclamoFormSet()
+    
+    context = {
+        'form': form,
+        'formset': formset,
+        'propietario': propietario
+    }
+    
+    return render(request, 'postventa_app/crear_reclamo.html', context)
+
+
+# ========================================
+# HELPERS / MIDDLEWARE-LIKE UTILITIES
+# ========================================
+
+def get_tecnico_from_user(user):
+    """Resuelve el Técnico vinculado al usuario (si existe)."""
+    if not user or not getattr(user, 'is_authenticated', False):
+        return None
+    try:
+        # Relación OneToOne: Tecnico.usuario -> User
+        from .models import Tecnico as _Tecnico
+        return _Tecnico.objects.select_related('usuario').get(usuario=user)
+    except Exception:
+        return None
+
+def tecnico_required(view_func):
+    """Decorator simple para exigir usuario con perfil de técnico."""
+    from functools import wraps
+    @wraps(view_func)
+    def _wrapped(request, *args, **kwargs):
+        if not request.user.is_authenticated:
+            return redirect('login')
+        tecnico = get_tecnico_from_user(request.user)
+        if not tecnico:
+            messages.error(request, 'Necesitas una cuenta de técnico para acceder a esta sección.')
+            return redirect('mis_reclamos')
+        request.tecnico = tecnico
+        return view_func(request, *args, **kwargs)
+    return _wrapped
+
+
+@login_required(login_url='login')
+def seleccionar_tecnico(request, reclamo_id):
+    """
+    Vista para seleccionar técnico disponible después de crear reclamo (RF-05 / HU-13)
+    Muestra técnicos filtrados por especialidad y proyecto
+    """
+    reclamo = get_object_or_404(Reclamo, id=reclamo_id)
+    
+    # Verificar que el reclamo pertenece al propietario autenticado
+    propietario = get_propietario_from_user(request.user)
+    if propietario is None:
+        messages.error(request, 'Tu cuenta no está asociada a un propietario.')
+        return redirect('login')
+    if reclamo.propietario != propietario:
+        messages.error(request, 'No tienes permiso para acceder a este reclamo.')
+        return redirect('mis_reclamos')
+    
+    # Filtrar técnicos disponibles
+    tecnicos_disponibles = Tecnico.objects.filter(
+        # Filtro 1: Que tengan la especialidad del reclamo
+        especialidades=reclamo.categoria,
+        # Filtro 2: Que estén asignados al proyecto del reclamo
+        proyectos_asignados=reclamo.proyecto,
+        # Filtro 3: Que acepten agendamiento online
+        acepta_agendamiento_online=True,
+        # Filtro 4: Que estén disponibles
+        estado='disponible'
+    ).distinct().order_by('-calificacion_promedio')
+    
+    # Calcular próximos horarios disponibles para cada técnico
+    tecnicos_con_horarios = []
+    for tecnico in tecnicos_disponibles:
+        # Obtener próximos 3 horarios disponibles
+        proximos_horarios = obtener_proximos_horarios(tecnico, cantidad=3)
+        
+        tecnicos_con_horarios.append({
+            'tecnico': tecnico,
+            'proximos_horarios': proximos_horarios,
+            'tiene_disponibilidad': len(proximos_horarios) > 0
+        })
+    
+    context = {
+        'reclamo': reclamo,
+        'propietario': propietario,
+        'tecnicos_disponibles': tecnicos_con_horarios,
+        'total_tecnicos': len(tecnicos_con_horarios)
+    }
+    
+    return render(request, 'postventa_app/seleccionar_tecnico.html', context)
+
+
+def obtener_proximos_horarios(tecnico, cantidad=3):
+    """
+    Obtiene los próximos horarios disponibles de un técnico
+    Basado en DisponibilidadTecnico y considerando citas ya agendadas
+    """
+    from datetime import date, timedelta, datetime, time
+    
+    horarios_disponibles = []
+    fecha_actual = date.today()
+    dias_a_revisar = 14  # Revisar próximos 14 días
+    
+    for i in range(dias_a_revisar):
+        if len(horarios_disponibles) >= cantidad:
+            break
+            
+        fecha = fecha_actual + timedelta(days=i)
+        dia_semana = fecha.weekday()  # 0=Lunes, 6=Domingo
+        
+        # Buscar disponibilidades del técnico para este día
+        disponibilidades = DisponibilidadTecnico.objects.filter(
+            tecnico=tecnico,
+            dia_semana=dia_semana,
+            activo=True
+        )
+        
+        for disponibilidad in disponibilidades:
+            if len(horarios_disponibles) >= cantidad:
+                break
+            
+            # Verificar que no haya citas en este horario ESPECÍFICO (hora_inicio y hora_fin)
+            from .models import Cita
+            cita_en_horario = Cita.objects.filter(
+                tecnico=tecnico,
+                fecha_cita=fecha,
+                hora_inicio=disponibilidad.hora_inicio,
+                hora_fin=disponibilidad.hora_fin,
+                estado__in=['pendiente', 'confirmada', 'en_curso']
+            ).exists()
+            
+            # Si el horario NO está ocupado, agregarlo a la lista
+            if not cita_en_horario:
+                horarios_disponibles.append({
+                    'fecha': fecha,
+                    'hora_inicio': disponibilidad.hora_inicio,
+                    'hora_fin': disponibilidad.hora_fin,
+                    'fecha_formateada': fecha.strftime('%d/%m/%Y'),
+                    'dia_nombre': ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'][dia_semana]
+                })
+    
+    return horarios_disponibles
+
+
+@login_required(login_url='login')
+def agendar_cita(request, reclamo_id, tecnico_id):
+    """
+    Vista para agendar cita con técnico seleccionado (RF-07 / HU-14)
+    TODO: Implementar calendario interactivo con FullCalendar.js
+    """
+    reclamo = get_object_or_404(Reclamo, id=reclamo_id)
+    tecnico = get_object_or_404(Tecnico, id=tecnico_id)
+    
+    # Verificar permisos
+    propietario = get_propietario_from_user(request.user)
+    if propietario is None:
+        messages.error(request, 'Tu cuenta no está asociada a un propietario.')
+        return redirect('login')
+    if reclamo.propietario != propietario:
+        messages.error(request, 'No tienes permiso para acceder a este reclamo.')
+        return redirect('mis_reclamos')
+    
+    context = {
+        'reclamo': reclamo,
+        'tecnico': tecnico,
+        'propietario': propietario
+    }
+    
+    # TODO: Crear template agendar_cita.html con FullCalendar
+    messages.info(request, f'Vista de calendario próximamente. Técnico seleccionado: {tecnico.usuario.get_full_name()}')
+    return redirect('mis_reclamos')
+
+
+# ========================================
+# PANEL DEL TÉCNICO (MVP)
+# ========================================
+
+@login_required(login_url='login')
+@tecnico_required
+def tecnico_dashboard(request):
+    """Resumen operativo para el técnico: KPIs y próximas citas."""
+    tecnico = request.tecnico
+    # KPIs de reclamos por estado
+    qs_reclamos = Reclamo.objects.filter(tecnico_asignado=tecnico)
+    kpis = {
+        'total': qs_reclamos.count(),
+        'pendiente': qs_reclamos.filter(estado='pendiente').count(),
+        'asignado': qs_reclamos.filter(estado='asignado').count(),
+        'en_proceso': qs_reclamos.filter(estado='en_proceso').count(),
+        'resuelto': qs_reclamos.filter(estado='resuelto').count(),
+        'cerrado': qs_reclamos.filter(estado='cerrado').count(),
+    }
+    # Prepara tarjetas para el template sin usar indexación por clave en la plantilla
+    kpi_cards = [
+        ('Total', 'secondary', kpis['total']),
+        ('Pendientes', 'warning', kpis['pendiente']),
+        ('Asignados', 'info', kpis['asignado']),
+        ('En proceso', 'primary', kpis['en_proceso']),
+        ('Resueltos', 'success', kpis['resuelto']),
+        ('Cerrados', 'dark', kpis['cerrado']),
+    ]
+    # Próximas 5 citas
+    from .models import Cita
+    hoy = timezone.localdate()
+    proximas_citas = (
+        Cita.objects
+        .filter(tecnico=tecnico, fecha_cita__gte=hoy)
+        .exclude(estado__in=['cancelada', 'completada'])
+        .order_by('fecha_cita', 'hora_inicio')[:5]
+    )
+    context = {
+        'tecnico': tecnico,
+        'kpis': kpis,
+        'kpi_cards': kpi_cards,
+        'proximas_citas': proximas_citas,
+        'today': hoy,
+    }
+    return render(request, 'postventa_app/tecnico/dashboard.html', context)
+
+
+@login_required(login_url='login')
+@tecnico_required
+def tecnico_mis_citas(request):
+    """Listado de citas del técnico con filtro simple por estado."""
+    tecnico = request.tecnico
+    from .models import Cita
+    estado = request.GET.get('estado')
+    citas = Cita.objects.filter(tecnico=tecnico).order_by('-fecha_cita', '-hora_inicio')
+    if estado:
+        citas = citas.filter(estado=estado)
+    context = {
+        'tecnico': tecnico,
+        'citas': citas,
+        'estado': estado or '',
+    }
+    return render(request, 'postventa_app/tecnico/mis_citas.html', context)
+
+
+@login_required(login_url='login')
+@tecnico_required
+def tecnico_detalle_reclamo(request, pk):
+    """Detalle del reclamo para técnico (lectura por ahora)."""
+    tecnico = request.tecnico
+    reclamo = get_object_or_404(Reclamo, pk=pk)
+    if reclamo.tecnico_asignado != tecnico:
+        messages.error(request, 'Este reclamo no está asignado a ti.')
+        return redirect('tecnico_dashboard')
+    # Reusar detalle con acciones propias del técnico
+    imagenes = reclamo.imagenes.all()
+    # Cita del día accionable para este técnico (si existe)
+    from .models import Cita
+    hoy = timezone.localdate()
+    cita_hoy_accionable = (
+        Cita.objects
+        .filter(reclamo=reclamo, tecnico=tecnico, fecha_cita=hoy, estado__in=['pendiente', 'confirmada', 'reprogramada'])
+        .order_by('hora_inicio')
+        .first()
+    )
+    # Cita en curso (si existe) para permitir completar
+    cita_en_curso = (
+        Cita.objects
+        .filter(reclamo=reclamo, tecnico=tecnico, estado='en_curso')
+        .order_by('-fecha_cita', '-hora_inicio')
+        .first()
+    )
+    # Últimos movimientos de bitácora relacionados a las citas de este reclamo
+    try:
+        bitacoras = reclamo.bitacoras_citas.select_related('cita', 'actor')[:10]
+    except Exception:
+        bitacoras = []
+    return render(request, 'postventa_app/tecnico/detalle_reclamo.html', {
+        'reclamo': reclamo,
+        'imagenes': imagenes,
+        'tecnico': tecnico,
+        'cita_hoy_accionable': cita_hoy_accionable,
+        'cita_en_curso': cita_en_curso,
+        'bitacoras': bitacoras,
+    })
+
+
+@login_required(login_url='login')
+@tecnico_required
+@require_http_methods(["POST"])
+def tecnico_iniciar_cita(request, cita_id):
+    """Permite al técnico iniciar su cita (estado -> en_curso)."""
+    from .models import Cita
+    tecnico = request.tecnico
+    cita = get_object_or_404(Cita, id=cita_id)
+    if cita.tecnico != tecnico:
+        messages.error(request, 'Esta cita no está asignada a ti.')
+        return redirect('tecnico_dashboard')
+    if cita.estado in ['cancelada', 'completada']:
+        messages.info(request, 'Esta cita no puede iniciarse.')
+        return redirect('tecnico_detalle_reclamo', pk=cita.reclamo_id)
+    # Restricción opcional: solo el día programado
+    if cita.fecha_cita != timezone.localdate():
+        messages.warning(request, 'Solo puedes iniciar la cita en la fecha programada.')
+        return redirect('tecnico_detalle_reclamo', pk=cita.reclamo_id)
+    # Iniciar
+    cita.iniciar(actor=request.user)
+    messages.success(request, 'Visita iniciada.')
+    return redirect('tecnico_detalle_reclamo', pk=cita.reclamo_id)
+
+
+@login_required(login_url='login')
+@tecnico_required
+def tecnico_historial_citas(request):
+    """Historial de citas completadas del técnico."""
+    tecnico = request.tecnico
+    from .models import Cita
+    estado = (request.GET.get('estado') or 'completada').strip()
+    qs = Cita.objects.filter(tecnico=tecnico)
+    if estado == 'todas':
+        citas = qs.order_by('-fecha_cita', '-hora_inicio')
+    elif estado in ['completada', 'en_curso', 'cancelada']:
+        citas = qs.filter(estado=estado).order_by('-fecha_cita', '-hora_inicio')
+    else:
+        # Por defecto mostrar completadas
+        estado = 'completada'
+        citas = qs.filter(estado='completada').order_by('-fecha_cita', '-hora_inicio')
+    return render(request, 'postventa_app/tecnico/historial_citas.html', {
+        'tecnico': tecnico,
+        'citas': citas,
+        'estado': estado,
+    })
+
+
+@login_required(login_url='login')
+@tecnico_required
+@require_http_methods(["POST"])
+def tecnico_completar_cita(request, cita_id):
+    """Permite al técnico completar su cita en curso, actualizar el reclamo y registrar Bitácora."""
+    from .models import Cita
+    tecnico = request.tecnico
+    cita = get_object_or_404(Cita, id=cita_id)
+    if cita.tecnico != tecnico:
+        messages.error(request, 'Esta cita no está asignada a ti.')
+        return redirect('tecnico_dashboard')
+    if cita.estado != 'en_curso':
+        messages.info(request, 'Solo puedes completar citas en curso.')
+        return redirect('tecnico_detalle_reclamo', pk=cita.reclamo_id)
+
+    # Capturar datos del formulario
+    solucion = (request.POST.get('solucion_aplicada') or '').strip()
+    marcar_resuelto = request.POST.get('marcar_resuelto') == 'on'
+    horas = (request.POST.get('horas_trabajadas') or '').strip()
+    materiales = (request.POST.get('materiales_utilizados') or '').strip()
+
+    # Actualizar reclamo
+    reclamo = cita.reclamo
+    updates = []
+    if solucion:
+        reclamo.solucion_aplicada = solucion
+        updates.append('solucion_aplicada')
+    if horas:
+        try:
+            reclamo.horas_trabajadas = float(horas)
+            updates.append('horas_trabajadas')
+        except ValueError:
+            pass
+    if materiales:
+        reclamo.materiales_utilizados = materiales
+        updates.append('materiales_utilizados')
+    # Cambiar a resuelto si corresponde (fecha_resolucion se fija en save())
+    if marcar_resuelto and reclamo.estado not in ['resuelto', 'cerrado']:
+        reclamo.estado = 'resuelto'
+        updates.append('estado')
+    if updates:
+        reclamo.save(update_fields=updates)
+    else:
+        # salvar sin update_fields si no hay campos listados pero se desea disparar lógica (no estrictamente necesario)
+        pass
+
+    # Completar cita y registrar detalle en bitácora
+    cita.completar(actor=request.user, detalle=solucion)
+    messages.success(request, 'Visita completada correctamente.')
+    return redirect('tecnico_detalle_reclamo', pk=cita.reclamo_id)
+
+
+@login_required(login_url='login')
+@tecnico_required
+@require_http_methods(["POST"])
+def tecnico_subir_evidencias(request, reclamo_id):
+    """Sube una o múltiples evidencias para el reclamo por parte del técnico."""
+    reclamo = get_object_or_404(Reclamo, id=reclamo_id)
+    tecnico = request.tecnico
+    if reclamo.tecnico_asignado != tecnico:
+        messages.error(request, 'No puedes subir evidencias para un reclamo no asignado a ti.')
+        return redirect('tecnico_dashboard')
+
+    files = request.FILES.getlist('evidencias')
+    tipo = (request.POST.get('tipo') or 'despues')
+    descripcion = (request.POST.get('descripcion_evidencia') or '').strip()
+    count = 0
+    for f in files:
+        try:
+            ImagenReclamo.objects.create(
+                reclamo=reclamo,
+                imagen=f,
+                tipo=tipo if tipo in dict(ImagenReclamo.TIPO_IMAGEN) else 'evidencia',
+                descripcion=descripcion or None,
+                subida_por='tecnico'
+            )
+            count += 1
+        except Exception:
+            continue
+    if count:
+        messages.success(request, f'Se subieron {count} archivo(s) de evidencia.')
+    else:
+        messages.warning(request, 'No se pudo subir ninguna evidencia. Intenta nuevamente.')
+    return redirect('tecnico_detalle_reclamo', pk=reclamo.id)
+
+
+@login_required(login_url='login')
+@tecnico_required
+@require_http_methods(["POST"])
+def tecnico_reagendar_cita(request, cita_id):
+    """Permite al técnico reagendar una cita pendiente/confirmada."""
+    from .models import Cita
+    tecnico = request.tecnico
+    cita = get_object_or_404(Cita, id=cita_id)
+    if cita.tecnico != tecnico:
+        messages.error(request, 'Esta cita no está asignada a ti.')
+        return redirect('tecnico_dashboard')
+    if cita.estado in ['completada', 'cancelada']:
+        messages.info(request, 'Esta cita no puede reprogramarse.')
+        return redirect('tecnico_detalle_reclamo', pk=cita.reclamo_id)
+
+    slot = request.POST.get('slot')
+    if not slot or '|' not in slot:
+        messages.error(request, 'Selecciona un horario válido.')
+        return redirect('tecnico_detalle_reclamo', pk=cita.reclamo_id)
+    try:
+        fecha_str, hi_str, hf_str = slot.split('|')
+        from datetime import datetime
+        nueva_fecha = datetime.strptime(fecha_str, '%Y-%m-%d').date()
+        nueva_hi = datetime.strptime(hi_str, '%H:%M').time()
+        nueva_hf = datetime.strptime(hf_str, '%H:%M').time()
+    except Exception:
+        messages.error(request, 'Formato de horario inválido.')
+        return redirect('tecnico_detalle_reclamo', pk=cita.reclamo_id)
+
+    # Guardar valores anteriores para bitácora
+    old_fecha = cita.fecha_cita
+    old_inicio = cita.hora_inicio
+    old_fin = cita.hora_fin
+    # Validar ocupación del técnico en ese horario (excluyendo esta misma cita)
+    conflicto = Cita.objects.filter(
+        tecnico=tecnico,
+        fecha_cita=nueva_fecha,
+        hora_inicio=nueva_hi,
+        hora_fin=nueva_hf,
+        estado__in=['pendiente', 'confirmada', 'en_curso']
+    ).exclude(id=cita.id).exists()
+    if conflicto:
+        messages.warning(request, 'El horario seleccionado ya está ocupado.')
+        return redirect('tecnico_detalle_reclamo', pk=cita.reclamo_id)
+
+    # Actualizar la cita
+    cita.fecha_cita = nueva_fecha
+    cita.hora_inicio = nueva_hi
+    cita.hora_fin = nueva_hf
+    cita.estado = 'confirmada'
+    cita.fecha_confirmacion = timezone.now()
+    if cita.notas_tecnico:
+        cita.notas_tecnico += ' | Reprogramada por el técnico'
+    else:
+        cita.notas_tecnico = 'Reprogramada por el técnico'
+    cita.save(update_fields=['fecha_cita', 'hora_inicio', 'hora_fin', 'estado', 'fecha_confirmacion', 'notas_tecnico'])
+
+    # Bitácora de reprogramación
+    try:
+        from .models import BitacoraCita
+        BitacoraCita.objects.create(
+            cita=cita,
+            reclamo=cita.reclamo,
+            accion='reprogramada',
+            actor=request.user,
+            old_fecha=old_fecha, old_hora_inicio=old_inicio, old_hora_fin=old_fin,
+            new_fecha=nueva_fecha, new_hora_inicio=nueva_hi, new_hora_fin=nueva_hf,
+        )
+    except Exception:
+        pass
+
+    messages.success(request, f'Cita reprogramada para el {nueva_fecha.strftime("%d/%m/%Y")} a las {nueva_hi.strftime("%H:%M")}')
+    if request.headers.get('x-requested-with') == 'XMLHttpRequest':
+        return JsonResponse({'ok': True, 'cita_id': cita.id})
+    return redirect('tecnico_detalle_reclamo', pk=cita.reclamo_id)
+
+
+@login_required(login_url='login')
+@tecnico_required
+def tecnico_api_horarios_cita(request, cita_id):
+    """Devuelve horarios disponibles para el técnico en formato JSON (excluye hoy)."""
+    from .models import Cita
+    tecnico = request.tecnico
+    cita = get_object_or_404(Cita, id=cita_id)
+    if cita.tecnico != tecnico:
+        return JsonResponse({'horarios': []}, status=403)
+    if cita.estado in ['completada', 'cancelada']:
+        return JsonResponse({'horarios': []})
+
+    # Reutiliza obtener_proximos_horarios
+    horarios = obtener_proximos_horarios(tecnico, cantidad=100)
+    try:
+        from datetime import date as _date
+        hoy = _date.today()
+        horarios = [h for h in horarios if h.get('fecha') and h['fecha'] != hoy]
+        horarios = horarios[:10]
+    except Exception:
+        pass
+
+    horarios_json = []
+    for h in horarios:
+        try:
+            fecha_iso = h['fecha'].strftime('%Y-%m-%d') if hasattr(h.get('fecha'), 'strftime') else str(h.get('fecha'))
+            hi = h['hora_inicio'].strftime('%H:%M') if hasattr(h.get('hora_inicio'), 'strftime') else str(h.get('hora_inicio'))
+            hf = h['hora_fin'].strftime('%H:%M') if hasattr(h.get('hora_fin'), 'strftime') else str(h.get('hora_fin'))
+            horarios_json.append({
+                'slot': f"{fecha_iso}|{hi}|{hf}",
+                'fecha': fecha_iso,
+                'fecha_formateada': h.get('fecha_formateada') or '',
+                'dia_nombre': h.get('dia_nombre') or '',
+                'hora_inicio': hi,
+                'hora_fin': hf,
+            })
+        except Exception:
+            continue
+    return JsonResponse({'horarios': horarios_json})
+
+
+@login_required(login_url='login')
+@require_http_methods(["POST"])
+def cancelar_cita(request, cita_id):
+    """Permite al propietario cancelar su cita vigente."""
+    from .models import Cita
+    propietario = get_propietario_from_user(request.user)
+    if propietario is None:
+        messages.error(request, 'No se encontró información del propietario.')
+        return redirect('login')
+
+    cita = get_object_or_404(Cita, id=cita_id)
+    if cita.propietario != propietario:
+        messages.error(request, 'No tienes permiso para cancelar esta cita.')
+        return redirect('mis_reclamos')
+
+    if cita.estado in ['completada', 'cancelada']:
+        messages.info(request, 'Esta cita ya no puede cancelarse.')
+        return redirect('mis_reclamos')
+
+    motivo = (request.POST.get('motivo') or '').strip()
+    cita.cancelar(motivo=motivo or 'Cancelada por el propietario desde el portal')
+    # Actualizar estado del reclamo según si quedan citas activas
+    reclamo = cita.reclamo
+    from .models import Cita as _Cita
+    tiene_activa = _Cita.objects.filter(reclamo=reclamo, estado__in=['pendiente', 'confirmada', 'en_curso']).exclude(id=cita.id).exists()
+    # Si no queda cita activa, mantener 'asignado' si hay técnico, si no volver a 'pendiente'
+    if not tiene_activa:
+        nuevo_estado = 'asignado' if reclamo.tecnico_asignado else 'pendiente'
+        if reclamo.estado != nuevo_estado:
+            reclamo.estado = nuevo_estado
+            reclamo.save(update_fields=['estado'])
+    messages.success(request, 'Tu cita fue cancelada correctamente.')
+    # Si es una petición AJAX, devolver JSON simple para permitir refrescar parcial o total
+    if request.headers.get('x-requested-with') == 'XMLHttpRequest':
+        return JsonResponse({'ok': True, 'reclamo_id': cita.reclamo_id})
+    return redirect('mis_reclamos')
+
+
+@login_required(login_url='login')
+def reagendar_cita(request, cita_id):
+    """Permite seleccionar un nuevo horario para la cita; actualiza la misma fila (sin crear nueva)."""
+    from .models import Cita
+    propietario = get_propietario_from_user(request.user)
+    if propietario is None:
+        messages.error(request, 'No se encontró información del propietario.')
+        return redirect('login')
+
+    cita = get_object_or_404(Cita, id=cita_id)
+    if cita.propietario != propietario:
+        messages.error(request, 'No tienes permiso para reagendar esta cita.')
+        return redirect('mis_reclamos')
+
+    # Solo se puede reagendar si no está completada/cancelada
+    if cita.estado in ['completada', 'cancelada']:
+        messages.info(request, 'Esta cita ya no puede reprogramarse.')
+        return redirect('mis_reclamos')
+
+    if request.method == 'POST':
+        # Espera un valor "slot" con formato YYYY-MM-DD|HH:MM|HH:MM
+        slot = request.POST.get('slot')
+        if not slot or '|' not in slot:
+            messages.error(request, 'Selecciona un horario válido para reagendar.')
+            return redirect('reagendar_cita', cita_id=cita.id)
+        try:
+            fecha_str, hi_str, hf_str = slot.split('|')
+            from datetime import datetime
+            nueva_fecha = datetime.strptime(fecha_str, '%Y-%m-%d').date()
+            nueva_hi = datetime.strptime(hi_str, '%H:%M').time()
+            nueva_hf = datetime.strptime(hf_str, '%H:%M').time()
+        except Exception:
+            messages.error(request, 'Formato de horario inválido.')
+            return redirect('reagendar_cita', cita_id=cita.id)
+
+        # Guardar valores anteriores para bitácora
+        old_fecha = cita.fecha_cita
+        old_inicio = cita.hora_inicio
+        old_fin = cita.hora_fin
+        # Validar ocupación del técnico en ese horario (excluyendo esta misma cita)
+        conflicto = Cita.objects.filter(
+            tecnico=cita.tecnico,
+            fecha_cita=nueva_fecha,
+            hora_inicio=nueva_hi,
+            hora_fin=nueva_hf,
+            estado__in=['pendiente', 'confirmada', 'en_curso']
+        ).exclude(id=cita.id).exists()
+        if conflicto:
+            messages.warning(request, 'El horario seleccionado ya no está disponible. Intenta con otro.')
+            return redirect('reagendar_cita', cita_id=cita.id)
+
+        # Actualizar la misma cita (sin crear nueva fila)
+        cita.fecha_cita = nueva_fecha
+        cita.hora_inicio = nueva_hi
+        cita.hora_fin = nueva_hf
+        cita.estado = 'confirmada'
+        cita.fecha_confirmacion = timezone.now()
+        # Nota opcional para dejar rastro
+        if cita.notas_cliente:
+            cita.notas_cliente += ' | Reprogramada por el propietario'
+        else:
+            cita.notas_cliente = 'Reprogramada por el propietario'
+        cita.save(update_fields=['fecha_cita', 'hora_inicio', 'hora_fin', 'estado', 'fecha_confirmacion', 'notas_cliente'])
+
+        # Bitácora de reprogramación
+        try:
+            from .models import BitacoraCita
+            BitacoraCita.objects.create(
+                cita=cita,
+                reclamo=cita.reclamo,
+                accion='reprogramada',
+                actor=request.user if request.user.is_authenticated else None,
+                old_fecha=old_fecha, old_hora_inicio=old_inicio, old_hora_fin=old_fin,
+                new_fecha=cita.fecha_cita, new_hora_inicio=cita.hora_inicio, new_hora_fin=cita.hora_fin,
+            )
+        except Exception:
+            pass
+        # Asegurar estado del reclamo y fechas clave
+        reclamo = cita.reclamo
+        from datetime import datetime as _dt
+        if reclamo.estado != 'asignado':
+            reclamo.estado = 'asignado'
+        if not reclamo.fecha_asignacion:
+            reclamo.fecha_asignacion = timezone.now()
+        if not reclamo.fecha_primera_visita:
+            try:
+                visita_dt = _dt.combine(nueva_fecha, nueva_hi)
+                visita_dt = timezone.make_aware(visita_dt, timezone.get_current_timezone())
+                reclamo.fecha_primera_visita = visita_dt
+            except Exception:
+                pass
+        reclamo.save(update_fields=['estado', 'fecha_asignacion', 'fecha_primera_visita'])
+
+        messages.success(request, f'Cita reprogramada para el {nueva_fecha.strftime("%d/%m/%Y")} a las {nueva_hi.strftime("%H:%M")}')
+        # Si es AJAX, devolver JSON para que la UI refresque sin navegación
+        if request.headers.get('x-requested-with') == 'XMLHttpRequest':
+            return JsonResponse({'ok': True, 'cita_id': cita.id})
+        return redirect('mis_reclamos')
+
+    # GET: ya no se usa la página completa; redirigir a Mis Reclamos para evitar template faltante
+    return redirect('mis_reclamos')
+
+
+@login_required(login_url='login')
+def api_horarios_cita(request, cita_id):
+    """Devuelve en JSON los próximos horarios disponibles para reagendar una cita (excluye hoy)."""
+    from .models import Cita
+    propietario = get_propietario_from_user(request.user)
+    if propietario is None:
+        return JsonResponse({'horarios': []}, status=403)
+
+    cita = get_object_or_404(Cita, id=cita_id)
+    if cita.propietario != propietario:
+        return JsonResponse({'horarios': []}, status=403)
+
+    # Si la cita ya no se puede reagendar, retornar vacío
+    if cita.estado in ['completada', 'cancelada']:
+        return JsonResponse({'horarios': []})
+
+    # Reutiliza la misma lógica de obtención que la vista HTML
+    horarios = obtener_proximos_horarios(cita.tecnico, cantidad=100)
+    try:
+        from datetime import date as _date
+        hoy = _date.today()
+        horarios = [h for h in horarios if h.get('fecha') and h['fecha'] != hoy]
+        horarios = horarios[:10]
+    except Exception:
+        pass
+
+    # Serializar horarios a tipos JSON-friendly
+    horarios_json = []
+    for h in horarios:
+        try:
+            fecha_iso = h['fecha'].strftime('%Y-%m-%d') if hasattr(h.get('fecha'), 'strftime') else str(h.get('fecha'))
+            hi = h['hora_inicio'].strftime('%H:%M') if hasattr(h.get('hora_inicio'), 'strftime') else str(h.get('hora_inicio'))
+            hf = h['hora_fin'].strftime('%H:%M') if hasattr(h.get('hora_fin'), 'strftime') else str(h.get('hora_fin'))
+            horarios_json.append({
+                'slot': f"{fecha_iso}|{hi}|{hf}",
+                'fecha': fecha_iso,
+                'fecha_formateada': h.get('fecha_formateada') or '',
+                'dia_nombre': h.get('dia_nombre') or '',
+                'hora_inicio': hi,
+                'hora_fin': hf,
+            })
+        except Exception:
+            continue
+
+    return JsonResponse({'horarios': horarios_json})
+
+
+@login_required(login_url='login')
+@require_http_methods(["POST"])
+def cancelar_reclamo(request, reclamo_id):
+    """Cancela un reclamo (estado -> cancelado) y opcionalmente cancela sus citas vigentes."""
+    propietario = get_propietario_from_user(request.user)
+    if propietario is None:
+        messages.error(request, 'No se encontró información del propietario.')
+        return redirect('login')
+
+    reclamo = get_object_or_404(Reclamo, id=reclamo_id)
+    if reclamo.propietario != propietario:
+        messages.error(request, 'No tienes permiso para cancelar este reclamo.')
+        return redirect('mis_reclamos')
+
+    # Cancelar reclamo y sus citas activas usando el método del modelo
+    reclamo.cancelar(motivo='Reclamo cancelado por el propietario')
+
+    messages.success(request, f'El reclamo #{reclamo.folio} fue cancelado correctamente.')
+    if request.headers.get('x-requested-with') == 'XMLHttpRequest':
+        return JsonResponse({'ok': True, 'reclamo_id': reclamo.id})
+    return redirect('mis_reclamos')
+
+
+@login_required(login_url='login')
+def mis_reclamos(request):
+    """Vista para ver los reclamos del propietario autenticado"""
+    propietario = get_propietario_from_user(request.user)
+    if propietario is None:
+        messages.error(request, 'No se encontró información del propietario.')
+        return redirect('login')
+    # Prefetch solo citas activas (pendiente/confirmada) para reflejar correctamente en UI
+    from django.db.models import Prefetch
+    from .models import Cita
+    reclamos = (
+        Reclamo.objects
+        .filter(propietario=propietario)
+        .order_by('-fecha_creacion')
+        .prefetch_related(
+            Prefetch(
+                'citas',
+                queryset=Cita.objects.filter(estado__in=['pendiente', 'confirmada']).order_by('-fecha_cita', '-hora_inicio'),
+                to_attr='citas_activas'
+            ),
+            Prefetch(
+                'citas',
+                queryset=Cita.objects.all().order_by('-fecha_creacion', '-id'),
+                to_attr='citas_todas'
+            ),
+        )
+    )
+
+    en_proceso = reclamos.exclude(estado__in=['resuelto', 'cancelado', 'cerrado']).count()
+    resueltos = reclamos.filter(estado='resuelto').count()
+    pendientes = reclamos.filter(estado='pendiente').count()
+
+    return render(request, 'postventa_app/mis_reclamos.html', {
+        'reclamos': reclamos,
+        'propietario': propietario,
+        'en_proceso': en_proceso,
+        'resueltos': resueltos,
+        'pendientes': pendientes
+    })
+    """
+    Vista para crear un nuevo reclamo con imágenes
+    """
+    if request.method == 'POST':
+        form = ReclamoForm(request.POST)
+        formset = ImagenReclamoFormSet(request.POST, request.FILES)
+        
+        if form.is_valid() and formset.is_valid():
+            # Guardar el reclamo
+            reclamo = form.save(commit=False)
+            reclamo.estado = 'pendiente'  # Estado inicial
+            reclamo.save()
+            
+            # Guardar las imágenes asociadas
+            formset.instance = reclamo
+            formset.save()
+            
+            messages.success(
+                request, 
+                f'Reclamo #{reclamo.id} creado exitosamente. '
+                f'Será atendido a la brevedad.'
+            )
+            return redirect('crear_reclamo')  # Redireccionar al mismo formulario limpio
+        else:
+            messages.error(
+                request,
+                'Por favor corrija los errores en el formulario.'
+            )
+    else:
+        form = ReclamoForm()
+        formset = ImagenReclamoFormSet()
+    
+    context = {
+        'form': form,
+        'formset': formset,
+    }
+    
+    return render(request, 'postventa_app/crear_reclamo.html', context)
+
+
+def lista_reclamos(request):
+    """
+    Vista para listar todos los reclamos
+    """
+    reclamos = Reclamo.objects.all().order_by('-fecha_creacion')
+    
+    context = {
+        'reclamos': reclamos,
+    }
+    
+    return render(request, 'postventa_app/lista_reclamos.html', context)
+
+
+def detalle_reclamo(request, pk):
+    """
+    Vista para ver el detalle de un reclamo específico
+    """
+    reclamo = get_object_or_404(Reclamo, pk=pk)
+    imagenes = reclamo.imagenes.all()
+    
+    context = {
+        'reclamo': reclamo,
+        'imagenes': imagenes,
+    }
+    
+    return render(request, 'postventa_app/detalle_reclamo.html', context)
+
+def inicio(request):
+    return HttpResponse("<h1>🚀 Plataforma de Postventa - Funcionando jeje</h1>")
+
+
+def obtener_disponibilidad_semanal(tecnico):
+    """
+    Obtiene la disponibilidad semanal recurrente del técnico
+    Retorna lista de objetos con día de la semana y horarios
+    """
+    disponibilidades = DisponibilidadTecnico.objects.filter(
+        tecnico=tecnico,
+        activo=True
+    ).order_by('dia_semana', 'hora_inicio')
+    
+    dias_nombres = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado']
+    
+    # Agrupar horarios por día
+    disponibilidad_agrupada = {}
+    for disp in disponibilidades:
+        dia = dias_nombres[disp.dia_semana]
+        if dia not in disponibilidad_agrupada:
+            disponibilidad_agrupada[dia] = []
+        
+        disponibilidad_agrupada[dia].append({
+            'hora_inicio': disp.hora_inicio.strftime('%H:%M'),
+            'hora_fin': disp.hora_fin.strftime('%H:%M')
+        })
+    
+    # Convertir a lista ordenada
+    resultado = []
+    for i, dia in enumerate(dias_nombres):
+        if dia in disponibilidad_agrupada:
+            resultado.append({
+                'dia': dia,
+                'dia_numero': i,
+                'horarios': disponibilidad_agrupada[dia]
+            })
+    
+    return resultado
+
+
+@login_required(login_url='login')
+def obtener_tecnicos_disponibles(request):
+    """
+    API endpoint para obtener técnicos disponibles según categoría y proyecto
+    Usado en el formulario de crear reclamo (AJAX)
+    """
+    categoria_id = request.GET.get('categoria_id')
+    proyecto_id = request.GET.get('proyecto_id')
+    
+    if not categoria_id or not proyecto_id:
+        return JsonResponse({'tecnicos': []})
+    
+    try:
+        categoria = Categoria.objects.get(id=categoria_id)
+        proyecto = Proyecto.objects.get(id=proyecto_id)
+        
+        # Filtrar técnicos disponibles
+        tecnicos = Tecnico.objects.filter(
+            especialidades=categoria,
+            proyectos_asignados=proyecto,
+            acepta_agendamiento_online=True,
+            estado='disponible'
+        ).distinct().order_by('-calificacion_promedio')
+        
+        # Construir respuesta JSON
+        tecnicos_data = []
+        for tecnico in tecnicos:
+            # Obtener disponibilidad semanal del técnico
+            disponibilidad_semanal = obtener_disponibilidad_semanal(tecnico)
+            
+            # Obtener próximos horarios concretos (fechas específicas)
+            proximos_horarios = obtener_proximos_horarios(tecnico, cantidad=10)
+            
+            tecnicos_data.append({
+                'id': tecnico.id,
+                'nombre': tecnico.usuario.get_full_name() or tecnico.usuario.username,
+                'especialidad': tecnico.especialidad,
+                'calificacion': float(tecnico.calificacion_promedio),
+                'cantidad_calificaciones': tecnico.cantidad_calificaciones,
+                'foto_url': tecnico.foto_perfil.url if tecnico.foto_perfil else None,
+                'iniciales': f"{tecnico.usuario.first_name[:1]}{tecnico.usuario.last_name[:1]}".upper(),
+                'disponibilidad_semanal': disponibilidad_semanal,
+                'proximos_horarios': proximos_horarios,
+                'tiene_disponibilidad': len(proximos_horarios) > 0
+            })
+        
+        return JsonResponse({'tecnicos': tecnicos_data})
+        
+    except (Categoria.DoesNotExist, Proyecto.DoesNotExist):
+        return JsonResponse({'tecnicos': []})
+
+
+# Nota: función agendar_cita consolidada arriba para evitar definiciones duplicadas

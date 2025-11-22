@@ -1,0 +1,459 @@
+from django import forms
+from django.contrib.auth.forms import UserCreationForm, AuthenticationForm
+from django.contrib.auth.models import User
+from .models import Reclamo, ArchivoEvidencia, Cliente, Proyecto
+
+
+# ========================================
+# FORMULARIOS DE AUTENTICACIÓN
+# ========================================
+
+class RegistroPropietarioForm(UserCreationForm):
+    """Formulario de registro para nuevos propietarios"""
+    
+    # Campos del User
+    email = forms.EmailField(
+        required=True,
+        widget=forms.EmailInput(attrs={
+            'class': 'form-control',
+            'placeholder': 'correo@ejemplo.cl'
+        })
+    )
+    
+    # Campos del Propietario
+    rut = forms.CharField(
+        max_length=12,
+        required=True,
+        label='RUT',
+        widget=forms.TextInput(attrs={
+            'class': 'form-control',
+            'placeholder': '12.345.678-9'
+        })
+    )
+    
+    nombre = forms.CharField(
+        max_length=120,
+        required=True,
+        label='Nombre Completo',
+        widget=forms.TextInput(attrs={
+            'class': 'form-control',
+            'placeholder': 'Juan Pérez González'
+        })
+    )
+    
+    telefono = forms.CharField(
+        max_length=30,
+        required=True,
+        label='Teléfono',
+        widget=forms.TextInput(attrs={
+            'class': 'form-control',
+            'placeholder': '+56 9 1234 5678'
+        })
+    )
+    
+    direccion = forms.CharField(
+        max_length=200,
+        required=True,
+        label='Dirección',
+        widget=forms.TextInput(attrs={
+            'class': 'form-control',
+            'placeholder': 'Av. Principal 123, Santiago'
+        })
+    )
+    
+    class Meta:
+        model = User
+        fields = ('username', 'email', 'password1', 'password2')
+        widgets = {
+            'username': forms.TextInput(attrs={
+                'class': 'form-control',
+                'placeholder': 'Usuario'
+            })
+        }
+    
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['password1'].widget.attrs.update({'class': 'form-control'})
+        self.fields['password2'].widget.attrs.update({'class': 'form-control'})
+    
+    def clean_rut(self):
+        """Validar que el RUT no esté registrado"""
+        rut = self.cleaned_data.get('rut')
+        if Propietario.objects.filter(rut=rut).exists():
+            raise forms.ValidationError('Este RUT ya está registrado.')
+        return rut
+    
+    def save(self, commit=True):
+        """Crear User y Propietario vinculados"""
+        user = super().save(commit=False)
+        user.email = self.cleaned_data['email']
+        
+        if commit:
+            user.save()
+            # Crear el Propietario asociado
+            Propietario.objects.create(
+                user=user,
+                rut=self.cleaned_data['rut'],
+                nombre=self.cleaned_data['nombre'],
+                email=self.cleaned_data['email'],
+                telefono=self.cleaned_data['telefono'],
+                direccion=self.cleaned_data['direccion']
+            )
+        return user
+
+
+class LoginForm(AuthenticationForm):
+    """Formulario de login personalizado - acepta RUT o Email"""
+    username = forms.CharField(
+        label='RUT o Email',
+        widget=forms.TextInput(attrs={
+            'class': 'form-control',
+            'placeholder': '12.345.678-9 o correo@ejemplo.cl'
+        })
+    )
+    password = forms.CharField(
+        label='Contraseña',
+        widget=forms.PasswordInput(attrs={
+            'class': 'form-control',
+            'placeholder': 'RUT sin puntos ni guión'
+        })
+    )
+
+
+# ========================================
+# FORMULARIOS DE RECLAMOS
+# ========================================
+
+class ReclamoAutenticadoForm(forms.ModelForm):
+    """
+    Formulario simplificado para usuarios autenticados.
+    Solo necesitan seleccionar proyecto/unidad y describir el problema.
+    """
+    
+    # Campo para seleccionar unidad
+    unidad = forms.ChoiceField(
+        required=True,
+        label='Unidad/Departamento',
+        widget=forms.Select(attrs={
+            'class': 'form-select'
+        }),
+        help_text='Seleccione su unidad'
+    )
+    
+    class Meta:
+        model = Reclamo
+        fields = ['proyecto', 'categoria', 'descripcion']
+        widgets = {
+            'proyecto': forms.Select(attrs={
+                'class': 'form-select',
+                'required': True
+            }),
+            'categoria': forms.Select(attrs={
+                'class': 'form-select',
+                'required': True
+            }),
+            'descripcion': forms.Textarea(attrs={
+                'class': 'form-control',
+                'rows': 5,
+                'placeholder': 'Describa detalladamente el problema (mínimo 20 caracteres)',
+                'required': True
+            })
+        }
+        labels = {
+            'proyecto': 'Proyecto',
+            'categoria': 'Categoría del Reclamo',
+            'descripcion': 'Descripción del Problema'
+        }
+    
+    def __init__(self, *args, propietario=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        
+        # Restringir proyectos solo al proyecto del propietario
+        if propietario:
+            if propietario.proyecto:
+                # Solo mostrar el proyecto del propietario
+                self.fields['proyecto'].queryset = Proyecto.objects.filter(id=propietario.proyecto.id)
+                self.fields['proyecto'].initial = propietario.proyecto
+                # Hacer el campo requerido pero con solo una opción
+                self.fields['proyecto'].empty_label = None
+            else:
+                # Si no tiene proyecto, mostrar todos
+                self.fields['proyecto'].queryset = Proyecto.objects.all()
+            
+            # Configurar opciones de unidad - solo mostrar la unidad del propietario
+            if propietario.unidad:
+                self.fields['unidad'].choices = [(propietario.unidad, propietario.unidad)]
+                self.fields['unidad'].initial = propietario.unidad
+            else:
+                # Si no tiene unidad, permitir ingreso manual
+                self.fields['unidad'].choices = [('', 'Seleccione una unidad')]
+    
+    def clean_descripcion(self):
+        descripcion = self.cleaned_data.get('descripcion', '')
+        if len(descripcion) < 20:
+            raise forms.ValidationError('La descripción debe tener al menos 20 caracteres.')
+        return descripcion
+    
+    def save(self, commit=True, propietario=None):
+        """Guardar reclamo asociado al propietario autenticado"""
+        reclamo = super().save(commit=False)
+        
+        if propietario:
+            reclamo.propietario = propietario
+            
+            # Completar ubicacion_especifica con la unidad del propietario
+            unidad = self.cleaned_data.get('unidad')
+            if unidad:
+                reclamo.ubicacion_especifica = f"{propietario.proyecto.nombre if propietario.proyecto else 'Proyecto'} - Unidad {unidad}"
+            
+            # ...existing code...
+            
+            # Actualizar unidad del propietario si cambió
+            if unidad and unidad != propietario.unidad:
+                propietario.unidad = unidad
+                propietario.save()
+        
+        if commit:
+            reclamo.save()
+        
+        return reclamo
+
+
+class ReclamoForm(forms.ModelForm):
+    """
+    Formulario para crear reclamos con diseño personalizado.
+    """
+    
+    # Campos adicionales del Propietario (HU-01)
+    propietario_rut = forms.CharField(
+        max_length=12,
+        label='RUT del Propietario',
+        widget=forms.TextInput(attrs={
+            'class': 'form-control',
+            'placeholder': '12.345.678-9',
+            'required': True
+        })
+    )
+
+    
+    propietario_nombre = forms.CharField(
+        max_length=150,
+        label='Nombre Completo',
+        widget=forms.TextInput(attrs={
+            'class': 'form-control',
+            'placeholder': 'Juan Pérez González',
+            'required': True
+        })
+    )
+    
+    propietario_email = forms.EmailField(
+        label='Email de Contacto',
+        widget=forms.EmailInput(attrs={
+            'class': 'form-control',
+            'placeholder': 'juan.perez@ejemplo.cl',
+            'required': True
+        })
+    )
+    
+    propietario_telefono = forms.CharField(
+        max_length=30,
+        label='Teléfono de Contacto',
+        widget=forms.TextInput(attrs={
+            'class': 'form-control',
+            'placeholder': '+56 9 1234 5678',
+            'required': True
+        })
+    )
+    
+    # Campos adicionales de ubicación (HU-01)
+    block = forms.CharField(
+        max_length=50,
+        required=False,
+        label='Block',
+        widget=forms.TextInput(attrs={
+            'class': 'form-control',
+            'placeholder': 'A, B, C, etc.'
+        })
+    )
+    
+    numero_propiedad = forms.CharField(
+        max_length=20,
+        label='Número de Propiedad',
+        widget=forms.TextInput(attrs={
+            'class': 'form-control',
+            'placeholder': '302, 15, Casa 7, etc.',
+            'required': True
+        })
+    )
+    
+    piso = forms.CharField(
+        max_length=10,
+        required=False,
+        label='Piso',
+        widget=forms.TextInput(attrs={
+            'class': 'form-control',
+            'placeholder': '3, PB, 1, etc.'
+        })
+    )
+    
+    class Meta:
+        model = Reclamo
+        fields = [
+            'proyecto', 
+            'categoria',
+            'descripcion',
+            'ubicacion_especifica'
+        ]
+        widgets = {
+            'proyecto': forms.Select(attrs={
+                'class': 'form-control',
+                'required': True
+            }),
+            'categoria': forms.Select(attrs={
+                'class': 'form-control',
+                'required': True
+            }),
+            'descripcion': forms.Textarea(attrs={
+                'class': 'form-control',
+                'rows': 5,
+                'placeholder': 'Describa detalladamente el problema (mínimo 20 caracteres)...',
+                'required': True,
+                'minlength': 20
+            }),
+            'ubicacion_especifica': forms.TextInput(attrs={
+                'class': 'form-control',
+                'placeholder': 'Ej: Baño principal, Cocina, Dormitorio 2',
+                'required': True
+            }),
+        }
+        labels = {
+            'proyecto': 'Proyecto Inmobiliario',
+            'categoria': 'Categoría de la Falla',
+            'descripcion': 'Descripción Detallada del Problema',
+            'ubicacion_especifica': 'Ubicación Específica dentro de la Propiedad',
+        }
+    
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        
+        # Personalizar queryset de proyectos (solo entregados y en garantía)
+        self.fields['proyecto'].queryset = Proyecto.objects.filter(estado__in=['entregado', 'garantia']).order_by('nombre')
+        
+        # Todas las categorías disponibles
+        self.fields['categoria'].queryset = Categoria.objects.all().order_by('nombre')
+        
+        # ...existing code...
+    
+    def clean_propietario_rut(self):
+        """Validar formato básico de RUT chileno"""
+        rut = self.cleaned_data.get('propietario_rut', '').strip()
+        
+        # Remover puntos y guión
+        rut_limpio = rut.replace('.', '').replace('-', '')
+        
+        if len(rut_limpio) < 8 or len(rut_limpio) > 9:
+            raise forms.ValidationError("RUT debe tener entre 8 y 9 dígitos")
+        
+        return rut
+    
+    def clean_propietario_email(self):
+        """Validar y normalizar email"""
+        email = self.cleaned_data.get('propietario_email', '').strip().lower()
+        return email
+    
+    def clean_descripcion(self):
+        """Validar longitud mínima de descripción (HU-01)"""
+        descripcion = self.cleaned_data.get('descripcion', '').strip()
+        
+        if len(descripcion) < 20:
+            raise forms.ValidationError("La descripción debe tener al menos 20 caracteres")
+        
+        return descripcion
+    
+    def save(self, commit=True):
+        """
+        Guardar creando o actualizando el propietario automáticamente
+        """
+        reclamo = super().save(commit=False)
+        
+        # Buscar o crear propietario
+        propietario, created = Propietario.objects.get_or_create(
+            rut=self.cleaned_data['propietario_rut'],
+            defaults={
+                'nombre': self.cleaned_data['propietario_nombre'],
+                'email': self.cleaned_data['propietario_email'],
+                'telefono': self.cleaned_data['propietario_telefono'],
+                'estado': 'activo',
+                'tipo': 'natural'
+            }
+        )
+        
+        # Si ya existe, actualizar datos de contacto
+        if not created:
+            propietario.nombre = self.cleaned_data['propietario_nombre']
+            propietario.email = self.cleaned_data['propietario_email']
+            propietario.telefono = self.cleaned_data['propietario_telefono']
+            propietario.save()
+        
+        reclamo.propietario = propietario
+        
+        # Construir ubicación específica con block, número y piso
+        ubicacion_completa = []
+        if self.cleaned_data.get('block'):
+            ubicacion_completa.append(f"Block {self.cleaned_data['block']}")
+        if self.cleaned_data.get('numero_propiedad'):
+            ubicacion_completa.append(f"Nº {self.cleaned_data['numero_propiedad']}")
+        if self.cleaned_data.get('piso'):
+            ubicacion_completa.append(f"Piso {self.cleaned_data['piso']}")
+        if reclamo.ubicacion_especifica:
+            ubicacion_completa.append(reclamo.ubicacion_especifica)
+        
+        reclamo.ubicacion_especifica = ", ".join(ubicacion_completa)
+        
+        if commit:
+            reclamo.save()
+        
+        return reclamo
+
+
+
+class ImagenReclamoForm(forms.ModelForm):
+    """
+    Formulario para subir imágenes/videos de evidencia del reclamo
+    """
+    
+    class Meta:
+        model = ImagenReclamo
+        fields = ['imagen', 'descripcion']
+        
+        widgets = {
+            'imagen': forms.FileInput(attrs={
+                'class': 'form-control archivo-evidencia',
+                'accept': 'image/*,video/*',
+                'required': False
+            }),
+            'descripcion': forms.TextInput(attrs={
+                'class': 'form-control',
+                'placeholder': 'Descripción del archivo (opcional)',
+                'required': False
+            }),
+        }
+        
+        labels = {
+            'imagen': 'Imagen o Video',
+            'descripcion': 'Descripción',
+        }
+
+
+# Formset para múltiples imágenes/videos
+ImagenReclamoFormSet = forms.inlineformset_factory(
+    Reclamo,
+    ImagenReclamo,
+    form=ImagenReclamoForm,
+    extra=1,  # Mostrar solo 1 formulario inicial
+    max_num=10,  # Máximo 10 archivos por reclamo
+    can_delete=True,
+    validate_max=True,
+    validate_min=True,  # Requerir al menos un archivo
+    min_num=1,  # Mínimo 1 archivo obligatorio
+)

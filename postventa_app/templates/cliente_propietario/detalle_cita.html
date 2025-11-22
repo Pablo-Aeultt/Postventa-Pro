@@ -1,0 +1,460 @@
+{% extends 'base.html' %}
+{% block title %}Cita {{ cita.id_cita }} - Mis Reclamos{% endblock %}
+
+{% block extra_css %}
+  
+<style>
+:root {
+    --color-primary: #1a4d4d;
+    --color-secondary: #2a6d6d;
+}
+
+/* === Tarjeta principal === */
+.card-custom {
+    background: #fff;
+    border-radius: 18px;
+    box-shadow: 0 4px 14px rgba(0,0,0,0.08);
+    border-left: 4px solid var(--color-primary);
+    margin-bottom: 30px;
+    overflow: hidden;
+    transition: all 0.3s ease;
+}
+
+.card-header-custom {
+    background: linear-gradient(135deg, var(--color-primary), var(--color-secondary));
+    color: white;
+    padding: 16px 24px;
+    font-size: 1.2rem;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    border-radius: 18px 18px 0 0;
+}
+
+/* === Tabla de detalles (una fila por campo) === */
+.detalle-cuadro {
+    border: 2px solid var(--color-primary);
+    border-radius: 10px;
+    overflow: hidden;
+}
+
+.detalle-fila {
+    display: grid;
+    grid-template-columns: 1fr 2fr;
+    align-items: stretch;
+    border-bottom: 2px solid var(--color-primary);
+    background: white;
+}
+
+.detalle-fila:last-child {
+    border-bottom: none;
+}
+
+.detalle-label {
+    background: #f8f8f8;
+    padding: 12px 18px;
+    font-weight: 600;
+    color: var(--color-primary);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border-right: 2px solid var(--color-primary);
+    align-self: stretch;
+}
+
+.detalle-valor {
+    padding: 12px 18px;
+    color: #222;
+}
+
+/* Ajustes para textos largos en "Resolución" */
+.detalle-fila.resolucion-fila { align-items: stretch; }
+.detalle-valor.valor-resolucion {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    display: block;
+    line-height: 1.4;
+    height: auto !important;
+    min-height: 0;
+}
+.detalle-valor.valor-resolucion p { margin: 0; }
+.detalle-fila.resolucion-fila { min-height: 0; }
+
+/* === Badge === */
+.badge-estado {
+    font-size: 0.9rem;
+    padding: 8px 14px;
+    border-radius: 12px;
+    font-weight: 600;
+}
+.badge-estado-pendiente { background: #fff3cd; color: #856404; }
+.badge-estado-confirmada { background: #cfe2ff; color: #084298; }
+.badge-estado-en_curso { background: #d1ecf1; color: #0c5460; }
+.badge-estado-completada { background: #d1e7dd; color: #0f5132; }
+.badge-estado-asignado { background: #cfe2ff; color: #084298; }
+.badge-estado-en_proceso { background: #d1ecf1; color: #0c5460; }
+.badge-estado-resuelto { background: #d1e7dd; color: #0f5132; }
+.badge-estado-cerrado { background: #e2e3e5; color: #383d41; }
+.badge-estado-cancelada { background: #f8d7da; color: #842029; }
+.badge-estado-cancelado { background: #f8d7da; color: #842029; }
+
+/* === Evidencias === */
+.evidencias-container {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 20px;
+}
+.img-evidencia, .video-evidencia {
+    width: 100%;
+    height: 220px;
+    object-fit: cover;
+    border-radius: 16px;
+    cursor: pointer;
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+}
+.img-evidencia:hover, .video-evidencia:hover {
+    transform: scale(1.05);
+    box-shadow: 0 8px 20px rgba(0,0,0,0.25);
+}
+.card-text {
+    text-align: center;
+    font-size: 0.85rem;
+    color: #555;
+    margin-top: 6px;
+}
+
+/* === Visor === */
+#visor {
+    display: none;
+    position: fixed;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    background: rgba(0,0,0,0.9);
+    justify-content: center;
+    align-items: center;
+    z-index: 2000;
+    backdrop-filter: blur(3px);
+}
+#visor img, #visor video {
+    max-width: 90%;
+    max-height: 90%;
+    border-radius: 18px;
+    box-shadow: 0 6px 25px rgba(0,0,0,0.5);
+    opacity: 0;
+    transform: scale(0.96);
+    transition: all 0.25s ease;
+}
+#visor.mostrar img, #visor.mostrar video {
+    opacity: 1;
+    transform: scale(1);
+}
+
+/* === Botón volver === */
+.btn-outline-primary {
+    border: 2px solid var(--color-primary);
+    color: var(--color-primary);
+    font-weight: 600;
+    border-radius: 10px;
+    transition: all 0.3s ease;
+}
+.btn-outline-primary:hover {
+    background: var(--color-primary);
+    color: white;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(26,77,77,0.2);
+}
+</style>
+{% endblock %}
+
+{% block content %}
+
+<div class="container py-4">
+  <div class="row justify-content-center">
+    <div class="col-lg-9">
+      <div class="card-custom">
+        <div class="card-header-custom">
+          <i class="bi bi-file-earmark-text"></i>
+          <span>Detalle del Reclamo</span>
+        </div>
+        <div class="card-body">
+          <div class="d-flex justify-content-between align-items-center mb-3">
+            <h5 class="fw-bold mb-0">Folio: 
+              <span class="text-primary">{{ cita.id_reclamo.numero_folio }}</span>
+            </h5>
+            {% if cita %}
+              <span class="badge badge-estado badge-estado-{{ cita.estado }}">
+                {{ cita.get_estado_display }}
+              </span>
+            {% endif %}
+          </div>
+
+          <div class="detalle-cuadro">
+            <div class="detalle-fila">
+              <div class="detalle-label"><i class="bi bi-person"></i>  Propietario</div>
+              <div class="detalle-valor">{{ cita.id_reclamo.propietario.nombre }}</div>
+            </div>
+            <div class="detalle-fila">
+              <div class="detalle-label"><i class="bi bi-credit-card"></i> RUT</div>
+              <div class="detalle-valor">{{ cita.id_reclamo.propietario.rut|default:"No especificado" }}</div>
+            </div>
+            <div class="detalle-fila">
+              <div class="detalle-label"><i class="bi bi-envelope"></i> Email</div>
+              <div class="detalle-valor">{{ cita.id_reclamo.propietario.email|default:"No especificado" }}</div>
+            </div>
+            <div class="detalle-fila">
+              <div class="detalle-label"><i class="bi bi-telephone"></i> Teléfono</div>
+              <div class="detalle-valor">{{ cita.id_reclamo.propietario.telefono|default:"No especificado" }}</div>
+            </div>
+            <div class="detalle-fila">
+              <div class="detalle-label"><i class="bi bi-building"></i> Proyecto</div>
+              <div class="detalle-valor">
+                {% if cita.id_reclamo.proyecto %}
+                  {{ cita.id_reclamo.proyecto }}
+                {% else %}
+                  <span class="text-primary">Sin proyecto asignado</span>
+                {% endif %}
+              </div>
+            </div>
+            <div class="detalle-fila">
+              <div class="detalle-label"><i class="bi bi-geo-alt"></i> Dirección</div>
+              <div class="detalle-valor">
+                {% if cita.id_reclamo.proyecto and cita.id_reclamo.proyecto.direccion %}
+                  {{ cita.id_reclamo.proyecto.direccion }}
+                {% else %}
+                  <span class="text-primary">Sin dirección</span>
+                {% endif %}
+              </div>
+            </div>
+            <div class="detalle-fila">
+              <div class="detalle-label"><i class="bi bi-house"></i> Unidad</div>
+              <div class="detalle-valor">
+                {% if cita.id_reclamo.propietario.unidades.exists %}
+                  {{ cita.id_reclamo.propietario.unidades.first.nombre }}
+                {% else %}
+                  {{ cita.id_reclamo.propietario.unidad|default:"Sin unidad" }}
+                {% endif %}
+              </div>
+            </div>
+            <div class="detalle-fila">
+              <div class="detalle-label"><i class="bi bi-tag"></i> Categoría</div>
+              <div class="detalle-valor">
+                {% if cita.id_reclamo.categoria %}
+                  {{ cita.id_reclamo.categoria.nombre }}
+                {% else %}
+                  <span class="text-primary">No especificada</span>
+                {% endif %}
+              </div>
+            </div>
+            <div class="detalle-fila">
+              <div class="detalle-label"><i class="bi bi-calendar3"></i> Fecha de creación</div>
+              <div class="detalle-valor">{{ cita.id_reclamo.fecha_ingreso|date:"d/m/Y H:i" }}</div>
+            </div>
+            <div class="detalle-fila">
+              <div class="detalle-label"><i class="bi bi-card-text"></i> Descripción</div>
+              <div class="detalle-valor">{{ cita.id_reclamo.descripcion }}</div>
+            </div>
+            <div class="detalle-fila">
+              <div class="detalle-label"><i class="bi bi-tools"></i> Técnico asignado</div>
+              <div class="detalle-valor">
+                {% if cita.id_tecnico %}
+                  {{ cita.id_tecnico.nombre }}
+                {% else %}
+                  <span class="text-primary">Pendiente de asignación</span>
+                {% endif %}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Evidencias del Reclamo (cliente) -->
+      <div class="card-custom">
+        <div class="card-header-custom" style="background: linear-gradient(135deg, #2b6a6a, #1a4d4d);">
+          <i class="bi bi-images"></i>
+          <span>Evidencias del Reclamo</span>
+        </div>
+        <div class="card-body">
+          {% if archivos_cliente %}
+            <div class="evidencias-container">
+            {% for archivo in archivos_cliente %}
+              {% if archivo.tipo == 'image' or archivo.archivo.url|lower|slice:"-4:" == ".jpg" or archivo.archivo.url|lower|slice:"-5:" == ".jpeg" or archivo.archivo.url|lower|slice:"-4:" == ".png" or archivo.archivo.url|lower|slice:"-4:" == ".gif" %}
+                <div>
+                    <a href="{{ archivo.archivo.url }}" target="_blank" onclick="abrirVisorImagen('{{ archivo.archivo.url }}'); return false;" style="text-decoration: none;">
+                      <div style="position: relative;">
+                        <img src="{{ archivo.archivo.url }}" alt="Evidencia {{ forloop.counter }}" class="img-evidencia" style="cursor:pointer; max-width: 220px; max-height: 160px; border-radius: 8px; object-fit: cover;">
+                        <div style="position: absolute; top: 8px; right: 8px; background: rgba(0,0,0,0.6); color: white; padding: 4px 8px; border-radius: 4px; font-size: 0.75rem;">
+                          <i class="bi bi-zoom-in"></i> Ver
+                        </div>
+                      </div>
+                    </a>
+                    {% if archivo.descripcion %}
+                      <p class="card-text">{{ archivo.descripcion }}</p>
+                    {% endif %}
+                  </div>
+                {% elif archivo.tipo and 'video' in archivo.tipo %}
+                  <div>
+                    <video controls style="max-width: 220px; max-height: 160px; object-fit: cover; border-radius: 8px;">
+                      <source src="{{ archivo.archivo.url }}" type="video/mp4">
+                      Tu navegador no soporta video.
+                    </video>
+                    {% if archivo.descripcion %}
+                      <p class="card-text">{{ archivo.descripcion }}</p>
+                    {% endif %}
+                  </div>
+                {% else %}
+                  <div style="text-align: center; padding: 20px;">
+                    <i class="bi bi-file-earmark-text" style="font-size: 3rem; color: #6c757d;"></i>
+                    <p style="margin-top: 8px; margin-bottom: 8px;">
+                      <a href="{{ archivo.archivo.url }}" target="_blank" class="btn btn-sm btn-outline-primary">
+                        <i class="bi bi-download"></i> Descargar archivo
+                      </a>
+                    </p>
+                    {% if archivo.descripcion %}
+                      <p class="card-text">{{ archivo.descripcion }}</p>
+                    {% endif %}
+                  </div>
+                {% endif %}
+              {% endfor %}
+            </div>
+          {% else %}
+            <div class="alert alert-warning"><i class="bi bi-exclamation-triangle"></i> No hay evidencias asociadas a este reclamo.</div>
+          {% endif %}
+        </div>
+      </div>
+
+      {% if visita_detalle %}
+      <div class="card-custom">
+        <div class="card-header-custom" style="background: linear-gradient(135deg, #198754, #0f5132);">
+          <i class="bi bi-clipboard-check"></i>
+          <span>Datos de la Visita Técnica</span>
+        </div>
+        <div class="card-body">
+          <div class="detalle-cuadro">
+            {% if visita_detalle.fecha_visita %}
+            <div class="detalle-fila">
+              <div class="detalle-label"><i class="bi bi-calendar-event"></i> Fecha de Visita</div>
+              <div class="detalle-valor">{{ visita_detalle.fecha_visita|date:"d/m/Y H:i" }}</div>
+            </div>
+            {% endif %}
+            {% if cita.estado == 'completada' and cita.id_reclamo.resolucion %}
+            <div class="detalle-fila">
+              <div class="detalle-label"><i class="bi bi-check2-square"></i> Resolución</div>
+              <div class="detalle-valor valor-resolucion">
+                {{ cita.id_reclamo.resolucion|linebreaksbr }}
+              </div>
+            </div>
+            {% endif %}
+            {% if visita_detalle.observaciones %}
+            <div class="detalle-fila">
+              <div class="detalle-label"><i class="bi bi-chat-left-text"></i> Comentarios de Resolución</div>
+              <div class="detalle-valor">{{ visita_detalle.observaciones|linebreaksbr }}</div>
+            </div>
+            {% endif %}
+          </div>
+
+          {% if archivos_tecnico %}
+          <h6 class="mt-4 mb-3"><i class="bi bi-images"></i> Imágenes de la Visita</h6>
+          <div class="evidencias-container">
+            {% for archivo in archivos_tecnico %}
+              {% if archivo.tipo == 'image' or archivo.archivo.url|lower|slice:"-4:" == ".jpg" or archivo.archivo.url|lower|slice:"-5:" == ".jpeg" or archivo.archivo.url|lower|slice:"-4:" == ".png" or archivo.archivo.url|lower|slice:"-4:" == ".gif" %}
+                <div>
+                  <a href="{{ archivo.archivo.url }}" target="_blank" onclick="abrirVisorImagen('{{ archivo.archivo.url }}'); return false;" style="text-decoration: none;">
+                    <div style="position: relative;">
+                      <img src="{{ archivo.archivo.url }}" alt="Evidencia {{ forloop.counter }}" class="img-evidencia" style="cursor:pointer; max-width: 220px; max-height: 160px; border-radius: 8px; object-fit: cover;">
+                      <div style="position: absolute; top: 8px; right: 8px; background: rgba(0,0,0,0.6); color: white; padding: 4px 8px; border-radius: 4px; font-size: 0.75rem;">
+                        <i class="bi bi-zoom-in"></i> Ver
+                      </div>
+                    </div>
+                  </a>
+                  {% if archivo.descripcion %}
+                    <p class="card-text">{{ archivo.descripcion }}</p>
+                  {% endif %}
+                </div>
+              {% endif %}
+            {% endfor %}
+          </div>
+          {% endif %}
+
+          {% if visita_detalle.usos_materiales.all %}
+          <h6 class="mt-4 mb-3"><i class="bi bi-tools"></i> Materiales Utilizados</h6>
+          <div class="table-responsive">
+            <table class="table table-sm table-bordered">
+              <thead class="table-light">
+                <tr>
+                  <th>Materiales</th>
+                  <th>Cantidades Utilizadas</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for uso in visita_detalle.usos_materiales.all %}
+                <tr>
+                  <td>{{ uso.id_material.nombre }}</td>
+                  <td>{{ uso.cantidad_usada }} {{ uso.id_material.unidad_medida }}s</td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+          {% endif %}
+        </div>
+      </div>
+      {% endif %}
+
+      <div class="text-end mt-3">
+        <a href="{% url 'mis_reclamos' %}" class="btn btn-outline-primary">
+          <i class="bi bi-arrow-left"></i> Volver al dashboard
+        </a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="visor" onclick="cerrarVisor()">
+  <img src="" alt="Vista ampliada" style="display:none;">
+  <video controls style="display:none;"></video>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+// === Evidencias: visor de imágenes y videos ===
+// Abre visor para imágenes
+function abrirVisorImagen(src) {
+  const visor = document.getElementById('visor');
+  const img = visor.querySelector('img');
+  const video = visor.querySelector('video');
+  video.pause(); video.style.display = 'none';
+  img.src = src; img.style.display = 'block';
+  visor.style.display = 'flex';
+  setTimeout(() => visor.classList.add('mostrar'), 10);
+}
+// Abre visor para videos
+function abrirVisorVideo(src) {
+  const visor = document.getElementById('visor');
+  const img = visor.querySelector('img');
+  const video = visor.querySelector('video');
+  img.style.display = 'none';
+  video.src = src; video.style.display = 'block';
+  visor.style.display = 'flex';
+  setTimeout(() => visor.classList.add('mostrar'), 10);
+  video.play();
+}
+// Cierra visor
+function cerrarVisor() {
+  const visor = document.getElementById('visor');
+  const img = visor.querySelector('img');
+  const video = visor.querySelector('video');
+  visor.classList.remove('mostrar');
+  setTimeout(() => {
+    visor.style.display = 'none';
+    img.src = ''; video.pause(); video.src = '';
+  }, 200);
+}
+// Permite cerrar visor con Escape
+document.addEventListener('keydown', e => { if (e.key === 'Escape') cerrarVisor(); });
+</script>
+{% endblock %}

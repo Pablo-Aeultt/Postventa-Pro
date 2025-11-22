@@ -1,0 +1,229 @@
+<nav class="navbar navbar-expand-lg navbar-dark navbar-custom">
+    <div class="container-fluid px-3 px-lg-5">
+        <!-- Logo/Brand -->
+        <a class="navbar-brand" href="
+            {% if request.resolver_match.url_name|slice:':7' == 'tecnico' %}
+                {% url 'dashboard_tecnico' %}
+            {% elif request.resolver_match.url_name|slice:':10' == 'supervisor' or request.resolver_match.url_name == 'dashboard_supervisor' or request.resolver_match.url_name == 'dashboard_kpis' %}
+                {% url 'dashboard_supervisor' %}
+            {% else %}
+                {% url 'mis_reclamos' %}
+            {% endif %}
+        ">
+            <i class="bi bi-building-gear"></i>
+            <span>Postventa Pro</span>
+        </a>
+        
+        <!-- Mobile Toggle -->
+        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" 
+                aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+        
+        <!-- Navigation Items -->
+        <div class="collapse navbar-collapse" id="navbarNav">
+            {% if user.is_authenticated %}
+                {% load propietario_extras %}
+                {% with propietario=user|propietario_for_user %}
+                <!-- Main Navigation -->
+                <ul class="navbar-nav me-auto mb-2 mb-lg-0">
+                    {# Determinar si estamos en sección de técnico basándose en el nombre de la URL #}
+                    {% if request.resolver_match.url_name|slice:':7' == 'tecnico' or request.resolver_match.url_name == 'dashboard_tecnico' or request.resolver_match.url_name == 'disponibilidad_tecnico' %}
+                        <!-- Navegación para TÉCNICO: solo opciones del módulo técnico -->
+                        <li class="nav-item">
+                            <a class="nav-link {% if request.resolver_match.url_name == 'dashboard_tecnico' %}active{% endif %}"
+                               href="{% url 'dashboard_tecnico' %}">
+                                <i class="bi bi-wrench-adjustable"></i>
+                                Panel Técnico
+                            </a>
+                        </li>
+                        
+                        <li class="nav-item">
+                            <a class="nav-link {% if request.resolver_match.url_name == 'tecnico_historial_citas' %}active{% endif %}"
+                               href="{% url 'tecnico_historial_citas' %}">
+                                <i class="bi bi-clock-history"></i>
+                                Historial
+                            </a>
+                        </li>
+                        
+                        <li class="nav-item">
+                            <a class="nav-link {% if request.resolver_match.url_name == 'disponibilidad_tecnico' %}active{% endif %}"
+                               href="{% url 'disponibilidad_tecnico' %}">
+                                <i class="bi bi-calendar-check"></i>
+                                Mi Disponibilidad
+                            </a>
+                        </li>
+
+                        <li class="nav-item">
+                            <a class="nav-link {% if request.resolver_match.url_name == 'tecnico_historial_escombros' %}active{% endif %}"
+                               href="{% url 'tecnico_historial_escombros' %}">
+                                <i class="bi bi-trash"></i>
+                                Gestión de Escombros
+                            </a>
+                        </li>
+                    {% elif request.resolver_match.url_name|slice:':10' == 'supervisor' or request.resolver_match.url_name == 'dashboard_supervisor' or request.resolver_match.url_name == 'dashboard_kpis' %}
+                        <!-- Navegación para SUPERVISOR: solo opciones del módulo supervisor -->
+                        <li class="nav-item">
+                            <a class="nav-link {% if request.resolver_match.url_name == 'dashboard_supervisor' %}active{% endif %}"
+                               href="{% url 'dashboard_supervisor' %}">
+                                <i class="bi bi-speedometer2"></i>
+                                Dashboard
+                            </a>
+                        </li>
+                        
+                        <li class="nav-item">
+                            <a class="nav-link {% if request.resolver_match.url_name == 'dashboard_kpis' %}active{% endif %}"
+                               href="{% url 'dashboard_kpis' %}">
+                                <i class="bi bi-bar-chart-line"></i>
+                                KPIs y Métricas
+                            </a>
+                        </li>
+                        
+                        <li class="nav-item">
+                            <a class="nav-link {% if request.resolver_match.url_name == 'supervisor_reclamos' %}active{% endif %}"
+                               href="{% url 'supervisor_reclamos' %}">
+                                <i class="bi bi-list-check"></i>
+                                Reclamos
+                            </a>
+                        </li>
+                        
+                        <li class="nav-item">
+                            <a class="nav-link {% if request.resolver_match.url_name == 'supervisor_validar_escombros' %}active{% endif %}"
+                               href="{% url 'supervisor_validar_escombros' %}">
+                                <i class="bi bi-trash"></i>
+                                Escombros
+                            </a>
+                        </li>
+                        
+                        <li class="nav-item">
+                            <a class="nav-link {% if request.resolver_match.url_name in 'supervisor_control_materiales,supervisor_detalle_materiales_visita' %}active{% endif %}"
+                               href="{% url 'supervisor_control_materiales' %}">
+                                <i class="bi bi-cube"></i>
+                                Materiales
+                            </a>
+                        </li>
+                        
+                        <li class="nav-item">
+                            <a class="nav-link {% if request.resolver_match.url_name in 'supervisor_disponibilidad_tecnicos,supervisor_calendario_disponibilidad' %}active{% endif %}"
+                               href="{% url 'supervisor_disponibilidad_tecnicos' %}">
+                                <i class="bi bi-calendar-check"></i>
+                                Disponibilidad
+                            </a>
+                        </li>
+                    {% elif propietario %}
+                        <!-- Navegación para PROPIETARIO: solo opciones del portal propietario -->
+                        <li class="nav-item">
+                            <a class="nav-link {% if request.resolver_match.url_name == 'mis_reclamos' %}active{% endif %}" 
+                               href="{% url 'mis_reclamos' %}">
+                                <i class="bi bi-clipboard-check"></i>
+                                Mis Reclamos
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link {% if request.resolver_match.url_name == 'crear_reclamo' %}active{% endif %}" 
+                               href="{% url 'crear_reclamo' %}">
+                                <i class="bi bi-plus-circle"></i>
+                                Nuevo Reclamo
+                            </a>
+                        </li>
+                    {% endif %}
+                    {% if user.is_staff %}
+                    <li class="nav-item">
+                        <a class="nav-link" href="/admin/" target="_blank">
+                            <i class="bi bi-gear-fill"></i>
+                            Administración
+                        </a>
+                    </li>
+                    {% endif %}
+                </ul>
+                
+                <!-- User Menu -->
+                <ul class="navbar-nav ms-auto">
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle d-flex align-items-center" href="#" id="userDropdown" 
+                           role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                            <div class="user-avatar me-2">
+                                    {% if propietario %}
+                                        {{ propietario.nombre.0|upper }}
+                                    {% elif tecnico_iniciales %}
+                                        {{ tecnico_iniciales }}
+                                    {% else %}
+                                        {{ user.first_name.0|default:user.username.0|upper }}{{ user.last_name.0|upper }}
+                                    {% endif %}
+                            </div>
+                            <span class="d-none d-md-inline">
+                                    {% if propietario %}
+                                        {{ propietario.nombre }}
+                                    {% elif tecnico %}
+                                        {{ tecnico.nombre }}
+                                    {% elif user.get_full_name %}
+                                        {{ user.get_full_name }}
+                                    {% else %}
+                                        {{ user.username }}
+                                    {% endif %}
+                            </span>
+                        </a>
+                        <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="userDropdown">
+                            <li>
+                                <div class="dropdown-item-text">
+                                    <div class="d-flex align-items-center">
+                                            <div class="user-avatar me-2">
+                                            {% if propietario %}
+                                                {{ propietario.nombre.0|upper }}
+                                            {% else %}
+                                                {{ user.first_name.0|default:user.username.0|upper }}{{ user.last_name.0|upper }}
+                                            {% endif %}
+                                        </div>
+                                        <div>
+                                            <div class="fw-bold">
+                                                {% if propietario %}
+                                                    {{ propietario.nombre }}
+                                                {% elif user.get_full_name %}
+                                                    {{ user.get_full_name }}
+                                                {% else %}
+                                                    {{ user.username }}
+                                                {% endif %}
+                                            </div>
+                                            <small class="text-muted">{{ user.email }}</small>
+                                        </div>
+                                    </div>
+                                </div>
+                            </li>
+                            <li><hr class="dropdown-divider"></li>
+                            
+                            {% if user.is_staff %}
+                            <li><hr class="dropdown-divider"></li>
+                            <li>
+                                <a class="dropdown-item" href="/admin/" target="_blank">
+                                    <i class="bi bi-shield-lock"></i>
+                                    Panel Admin
+                                </a>
+                            </li>
+                            {% endif %}
+                            <li><hr class="dropdown-divider"></li>
+                            <li>
+                                <a class="dropdown-item text-danger" href="{% url 'logout' %}">
+                                    <i class="bi bi-box-arrow-right"></i>
+                                    Cerrar Sesión
+                                </a>
+                            </li>
+                        </ul>
+                    </li>
+                </ul>
+                {% endwith %}
+                {% else %}
+                <!-- Guest Navigation: Solo mostrar si NO estamos en la página de login -->
+                {% if request.resolver_match.url_name != 'login' %}
+                <ul class="navbar-nav ms-auto">
+                    <li class="nav-item">
+                        <a class="nav-link active" href="{% url 'login' %}">
+                            <i class="bi bi-box-arrow-in-right"></i>
+                            Iniciar Sesión
+                        </a>
+                    </li>
+                </ul>
+                {% endif %}
+            {% endif %}
+        </div>
+    </div>
+</nav>

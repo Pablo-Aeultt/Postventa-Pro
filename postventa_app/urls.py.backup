@@ -1,0 +1,36 @@
+from django.urls import path
+from . import views
+
+urlpatterns = [
+    # Autenticación 
+    path('', views.login_propietario, name='login'),
+    path('logout/', views.logout_propietario, name='logout'),
+    
+    # Reclamos (requieren autenticación)
+    path('historial', views.mis_reclamos, name='mis_reclamos'),
+    path('crear/', views.crear_reclamo, name='crear_reclamo'),
+    path('reclamo/<int:pk>/', views.detalle_reclamo, name='detalle_reclamo'),
+    
+    # API AJAX
+    path('api/tecnicos-disponibles/', views.obtener_tecnicos_disponibles, name='api_tecnicos_disponibles'),
+    path('api/cita/<int:cita_id>/horarios/', views.api_horarios_cita, name='api_horarios_cita'),
+    
+    # Agendamiento de técnicos
+    path('reclamo/<int:reclamo_id>/seleccionar-tecnico/', views.seleccionar_tecnico, name='seleccionar_tecnico'),
+    path('reclamo/<int:reclamo_id>/agendar/<int:tecnico_id>/', views.agendar_cita, name='agendar_cita'),
+    path('reclamo/<int:reclamo_id>/cancelar/', views.cancelar_reclamo, name='cancelar_reclamo'),
+    # Gestión de citas: cancelar y reagendar
+    path('cita/<int:cita_id>/cancelar/', views.cancelar_cita, name='cancelar_cita'),
+    path('cita/<int:cita_id>/reagendar/', views.reagendar_cita, name='reagendar_cita'),
+
+    # Panel Técnico
+    path('tecnico/dashboard/', views.tecnico_dashboard, name='tecnico_dashboard'),
+    path('tecnico/citas/', views.tecnico_mis_citas, name='tecnico_mis_citas'),
+    path('tecnico/citas/historial/', views.tecnico_historial_citas, name='tecnico_historial_citas'),
+    path('tecnico/reclamo/<int:pk>/', views.tecnico_detalle_reclamo, name='tecnico_detalle_reclamo'),
+    path('tecnico/cita/<int:cita_id>/iniciar/', views.tecnico_iniciar_cita, name='tecnico_iniciar_cita'),
+    path('tecnico/cita/<int:cita_id>/completar/', views.tecnico_completar_cita, name='tecnico_completar_cita'),
+    path('tecnico/cita/<int:cita_id>/reagendar/', views.tecnico_reagendar_cita, name='tecnico_reagendar_cita'),
+    path('tecnico/cita/<int:cita_id>/horarios/', views.tecnico_api_horarios_cita, name='tecnico_api_horarios_cita'),
+    path('tecnico/reclamo/<int:reclamo_id>/evidencias/subir/', views.tecnico_subir_evidencias, name='tecnico_subir_evidencias'),
+]

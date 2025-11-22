@@ -1,0 +1,228 @@
+{% extends 'base.html' %}
+{% load custom_filters %}
+
+{% block title %}Dashboard KPIs - Postventa Pro{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <!-- Encabezado Principal -->
+    <div class="row mb-4">
+        <div class="col-md-12">
+            <div class="card border-0 shadow-md" style="background: linear-gradient(135deg, #1A4D4D 0%, #2a6f6f 100%);">
+                <div class="card-body">
+                    <div class="row align-items-center">
+                        <div class="col-md-8">
+                            <h4 class="card-title mb-1" style="color: white;">
+                                <i class="fas fa-chart-line"></i> Dashboard KPIs
+                            </h4>
+                            <p class="text-white-50 mb-0">Indicadores clave de desempeño en tiempo real</p>
+                        </div>
+                        <div class="col-md-4 text-end">
+                            <a href="{% url 'dashboard_supervisor' %}" class="btn btn-sm" style="background-color: rgba(255,255,255,0.2); color: white; border: 1px solid rgba(255,255,255,0.3);">
+                                <i class="fas fa-arrow-left"></i> Volver
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filtros de Fecha -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card border-0 shadow-sm" style="background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%);">
+                <div class="card-body">
+                    <form method="GET" class="row g-3">
+                        <div class="col-md-4">
+                            <label class="form-label fw-bold" style="color: #1A4D4D;"><i class="fas fa-calendar-alt"></i> Fecha Inicio</label>
+                            <input type="date" name="fecha_inicio" class="form-control" 
+                                   value="{{ fecha_inicio_input|default:'' }}">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-bold" style="color: #1A4D4D;"><i class="fas fa-calendar-alt"></i> Fecha Fin</label>
+                            <input type="date" name="fecha_fin" class="form-control" 
+                                   value="{{ fecha_fin_input|default:'' }}">
+                        </div>
+                        <div class="col-md-4 d-flex gap-2 align-items-end">
+                            <button type="submit" class="btn flex-grow-1" style="background: linear-gradient(135deg, #1A4D4D 0%, #2a6f6f 100%); color: white; border: none;">
+                                <i class="fas fa-search"></i> Filtrar
+                            </button>
+                            <a href="{% url 'dashboard_kpis' %}" class="btn btn-outline-secondary">
+                                <i class="fas fa-redo"></i>
+                            </a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Pestañas por Categoría -->
+    <div class="row mb-3">
+        <div class="col-12">
+            <ul class="nav nav-tabs border-bottom" role="tablist">
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link active" id="todos-tab" data-bs-toggle="tab" 
+                            data-bs-target="#todos" type="button" role="tab" style="color: #1A4D4D; font-weight: 500;">
+                        <i class="fas fa-th"></i> Todos (15)
+                    </button>
+                </li>
+                {% for categoria in categorias %}
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="{{ categoria|slugify_custom }}-tab" data-bs-toggle="tab" 
+                            data-bs-target="#{{ categoria|slugify_custom }}" type="button" role="tab" style="color: #1A4D4D; font-weight: 500;">
+                        {{ categoria }} ({{ kpis_por_categoria|get_item:categoria|length }})
+                    </button>
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+    </div>
+
+    <!-- Contenido de Pestañas -->
+    <div class="tab-content">
+        <!-- Tab: Todos -->
+        <div class="tab-pane fade show active" id="todos" role="tabpanel">
+            <div class="row">
+                {% for kpi in kpis %}
+                <div class="col-lg-4 col-md-6 col-sm-12 mb-4">
+                    {% include 'supervisor/includes/kpi_card.html' with kpi=kpi %}
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- Tabs por Categoría -->
+        {% for categoria in categorias %}
+        <div class="tab-pane fade" id="{{ categoria|slugify_custom }}" role="tabpanel">
+            <div class="row">
+                {% for kpi in kpis_por_categoria|get_item:categoria %}
+                <div class="col-lg-6 col-md-12 mb-4">
+                    {% include 'supervisor/includes/kpi_card_large.html' with kpi=kpi %}
+                </div>
+                {% endfor %}
+            </div>
+            
+            <!-- Sección Especial: Desglose de Materiales para pestaña Costo -->
+            {% if categoria == 'Costo' and kpis_por_categoria|get_item:categoria %}
+            <div class="row mt-5">
+                <div class="col-12">
+                    <div class="card border-0 shadow-sm" style="background: linear-gradient(135deg, #fff5f5 0%, #ffffff 100%);">
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between align-items-center mb-4">
+                                <h5 class="card-title mb-0" style="color: #dc3545;">
+                                    <i class="fas fa-cube"></i> Desglose de Materiales Utilizados
+                                </h5>
+                                {% if fecha_inicio or fecha_fin %}
+                                <small class="text-muted">
+                                    <i class="fas fa-calendar"></i>
+                                    {% if fecha_inicio and fecha_fin %}
+                                        {{ fecha_inicio }} a {{ fecha_fin }}
+                                    {% elif fecha_inicio %}
+                                        Desde {{ fecha_inicio }}
+                                    {% elif fecha_fin %}
+                                        Hasta {{ fecha_fin }}
+                                    {% endif %}
+                                </small>
+                                {% endif %}
+                            </div>
+                            
+                            {% for kpi in kpis_por_categoria|get_item:categoria %}
+                                {% if kpi.id == 'KPI_08' %}
+                                    {% if kpi.datos_adicionales.materiales %}
+                                    <div class="table-responsive">
+                                        <table class="table table-hover align-middle">
+                                            <thead style="background-color: #f8f9fa; border-bottom: 2px solid #dc3545;">
+                                                <tr>
+                                                    <th style="color: #1A4D4D; font-weight: 600;">Material</th>
+                                                    <th class="text-center" style="color: #1A4D4D; font-weight: 600;">Cantidad</th>
+                                                    <th class="text-end" style="color: #1A4D4D; font-weight: 600;">Costo Total</th>
+                                                    <th class="text-end" style="color: #1A4D4D; font-weight: 600;">% del Total</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {% for mat in kpi.datos_adicionales.materiales %}
+                                                <tr>
+                                                    <td style="font-weight: 500; color: #1A4D4D;">{{ mat.nombre }}</td>
+                                                    <td class="text-center"><span class="badge bg-info">{{ mat.cantidad|floatformat:1 }}</span></td>
+                                                    <td class="text-end" style="color: #dc3545; font-weight: 600;">${{ mat.costo|floatformat:0 }}</td>
+                                                    <td class="text-end" style="color: #6c757d;">
+                                                        {% widthratio mat.costo kpi.datos_adicionales.costo_total 100 %}%
+                                                    </td>
+                                                </tr>
+                                                {% endfor %}
+                                            </tbody>
+                                            <tfoot style="border-top: 2px solid #dc3545;">
+                                                <tr style="background-color: #f8f9fa; font-weight: 600;">
+                                                    <td colspan="2">TOTAL</td>
+                                                    <td class="text-end" style="color: #dc3545; font-size: 1.1rem;">${{ kpi.datos_adicionales.costo_total|floatformat:0 }}</td>
+                                                    <td class="text-end">100%</td>
+                                                </tr>
+                                            </tfoot>
+                                        </table>
+                                    </div>
+                                    {% else %}
+                                    <div class="alert alert-info" role="alert">
+                                        <i class="fas fa-info-circle"></i> No hay materiales registrados en este período.
+                                    </div>
+                                    {% endif %}
+                                {% endif %}
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+
+</div>
+
+<style>
+    .card {
+        transition: transform 0.3s, box-shadow 0.3s, background 0.3s;
+        height: 100%;
+        border-radius: 0.75rem;
+    }
+    
+    .card:hover {
+        transform: translateY(-8px);
+        box-shadow: 0 12px 24px rgba(26, 77, 77, 0.15) !important;
+    }
+    
+    .kpi-value {
+        font-size: 2.5rem;
+        font-weight: 700;
+        color: #0d6efd;
+    }
+    
+    .kpi-unit {
+        font-size: 0.9rem;
+        color: #6c757d;
+        font-weight: 500;
+    }
+    
+    .kpi-indicator {
+        display: inline-block;
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        margin-right: 5px;
+    }
+    
+    .nav-link.active {
+        border-bottom: 3px solid #1A4D4D !important;
+        color: #1A4D4D !important;
+    }
+    
+    .shadow-md {
+        box-shadow: 0 6px 12px rgba(26, 77, 77, 0.12) !important;
+    }
+</style>
+
+<!-- Chart.js Library -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
+
+{% endblock %}

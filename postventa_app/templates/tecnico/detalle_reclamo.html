@@ -1,0 +1,1075 @@
+{% extends 'base.html' %}
+{% block title %}Reclamo {{ reclamo.folio }} - Técnico{% endblock %}
+
+{% block extra_css %}
+  
+<style>
+:root {
+    --color-primary: #1a4d4d;
+    --color-secondary: #2a6d6d;
+}
+
+  .btn-success-custom {
+    background: linear-gradient(135deg, var(--color-primary), var(--color-secondary));
+    border: none;
+    color: #fff !important;
+    padding: 12px 30px;
+    border-radius: 10px;
+    font-weight: 600;
+    transition: all 0.3s;
+  }
+  .btn-success-custom:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(26, 77, 77, 0.3);
+    color: #fff !important;
+  }
+
+/* === Tarjeta principal === */
+.card-custom {
+    background: #fff;
+    border-radius: 18px;
+    box-shadow: 0 4px 14px rgba(0,0,0,0.08);
+    border-left: 4px solid var(--color-primary);
+    margin-bottom: 30px;
+    overflow: hidden;
+    transition: all 0.3s ease;
+}
+
+.card-header-custom {
+    background: linear-gradient(135deg, var(--color-primary), var(--color-secondary));
+    color: white;
+    padding: 16px 24px;
+    font-size: 1.2rem;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    border-radius: 18px 18px 0 0;
+}
+
+/* === Tabla de detalles (una fila por campo) === */
+.detalle-cuadro {
+    border: 2px solid var(--color-primary);
+    border-radius: 10px;
+    overflow: hidden;
+}
+
+.detalle-fila {
+    display: grid;
+    grid-template-columns: 1fr 2fr;
+    align-items: stretch; /* estira ambas celdas para que el color del título llene verticalmente */
+    border-bottom: 2px solid var(--color-primary);
+    background: white;
+}
+
+.detalle-fila:last-child {
+    border-bottom: none;
+}
+
+.detalle-label {
+    background: #f8f8f8;
+    padding: 12px 18px;
+    font-weight: 600;
+    color: var(--color-primary);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border-right: 2px solid var(--color-primary);
+    align-self: stretch; /* asegura que la celda de título llene toda la altura de la fila */
+}
+
+.detalle-valor {
+    padding: 12px 18px;
+    color: #222;
+}
+
+/* Ajustes para textos largos en "Resolución" */
+.detalle-fila.resolucion-fila { align-items: stretch; }
+.detalle-valor.valor-resolucion {
+    white-space: pre-wrap; /* respeta saltos de línea del texto */
+    overflow-wrap: anywhere; /* evita desbordes con palabras muy largas */
+    word-break: break-word; /* compat extra para navegadores antiguos */
+    display: block; /* asegura caja de bloque normal */
+    line-height: 1.4;
+    height: auto !important; /* evita alturas fijas heredadas */
+    min-height: 0; /* permite colapsar si es corto */
+}
+.detalle-valor.valor-resolucion p { margin: 0; }
+.detalle-fila.resolucion-fila { min-height: 0; }
+
+/* === Badge === */
+.badge-estado {
+    font-size: 0.9rem;
+    padding: 8px 14px;
+    border-radius: 12px;
+    font-weight: 600;
+}
+.badge-estado-pendiente { background: #fff3cd; color: #856404; }
+.badge-estado-confirmada { background: #cfe2ff; color: #084298; }
+.badge-estado-en_curso { background: #d1ecf1; color: #0c5460; }
+.badge-estado-completada { background: #d1e7dd; color: #0f5132; }
+.badge-estado-asignado { background: #cfe2ff; color: #084298; }
+.badge-estado-en_proceso { background: #d1ecf1; color: #0c5460; }
+.badge-estado-resuelto { background: #d1e7dd; color: #0f5132; }
+.badge-estado-cerrado { background: #e2e3e5; color: #383d41; }
+.badge-estado-cancelada { background: #f8d7da; color: #842029; }
+.badge-estado-cancelado { background: #f8d7da; color: #842029; }
+
+/* === Evidencias === */
+.evidencias-container {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 20px;
+}
+.img-evidencia, .video-evidencia {
+    width: 100%;
+    height: 220px;
+    object-fit: cover;
+    border-radius: 16px;
+    cursor: pointer;
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+}
+.img-evidencia:hover, .video-evidencia:hover {
+    transform: scale(1.05);
+    box-shadow: 0 8px 20px rgba(0,0,0,0.25);
+}
+.card-text {
+    text-align: center;
+    font-size: 0.85rem;
+    color: #555;
+    margin-top: 6px;
+}
+
+/* === Visor === */
+#visor {
+    display: none;
+    position: fixed;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    background: rgba(0,0,0,0.9);
+    justify-content: center;
+    align-items: center;
+    z-index: 2000;
+    backdrop-filter: blur(3px);
+}
+#visor img, #visor video {
+    max-width: 90%;
+    max-height: 90%;
+    border-radius: 18px;
+    box-shadow: 0 6px 25px rgba(0,0,0,0.5);
+    opacity: 0;
+    transform: scale(0.96);
+    transition: all 0.25s ease;
+}
+#visor.mostrar img, #visor.mostrar video {
+    opacity: 1;
+    transform: scale(1);
+}
+
+/* === Botón volver === */
+.btn-outline-primary {
+    border: 2px solid var(--color-primary);
+    color: var(--color-primary);
+    font-weight: 600;
+    border-radius: 10px;
+    transition: all 0.3s ease;
+}
+.btn-outline-primary:hover {
+    background: var(--color-primary);
+    color: white;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(26,77,77,0.2);
+}
+.buscador-materiales-input {
+    background: #f9fafb;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    font-size: 15px;
+    color: #222;
+    transition: border-color 0.2s;
+  }
+  .buscador-materiales-input:focus {
+    border-color: #1976d2;
+    background: #fff;
+  }
+  /* Estilo plataforma para el modal de reagendar (copiado de cliente_propietario/mis_reclamos.html) */
+  .reagendar-modal .modal-content {
+    border-radius: 16px;
+    border-left: 4px solid var(--color-primary);
+    box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+  }
+  .reagendar-modal .modal-header {
+    background: linear-gradient(135deg, var(--color-primary), var(--color-secondary));
+    color: #fff;
+    border-bottom: none;
+  }
+  .reagendar-modal .modal-title i { margin-right: 8px; }
+  .reagendar-modal .modal-body { padding-top: 1rem; }
+  .reagendar-modal .modal-footer { border-top: none; }
+  .reagendar-modal .btn-confirmar {
+    background: linear-gradient(135deg, var(--color-primary), var(--color-secondary));
+    border: none;
+    color: white;
+    font-weight: 600;
+    transition: all 0.3s;
+  }
+  .reagendar-modal .btn-confirmar:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(26, 77, 77, 0.3);
+    color: white;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<div class="container py-4">
+  <div class="row justify-content-center">
+    <div class="col-lg-9">
+      {% if cita_hoy_accionable and not cita_en_curso %}
+      <form method="post" action="{% url 'tecnico_iniciar_cita' cita_hoy_accionable.id_cita %}" class="mb-3">
+        {% csrf_token %}
+  <button type="submit" class="btn btn-success-custom"><i class="bi bi-play-circle"></i> Iniciar visita</button>
+      </form>
+      {% endif %}
+      {% if cita_en_curso %}
+      <div class="card-custom">
+        <div class="card-header-custom">
+          <i class="bi bi-clipboard-check"></i>
+          <span>Completar visita en curso</span>
+        </div>
+        <div class="card-body">
+          {% if visita_en_curso and visita_en_curso.fecha_visita %}
+          <div class="mb-3">
+            <label class="form-label fw-semibold"><i class="bi bi-clock-history"></i> Cronómetro de visita</label>
+            <div id="cronometro" style="font-size:1.5em; font-weight:bold; color:#1a4d4d; background:#f8f8f8; border-radius:8px; padding:10px 18px; display:inline-block;"></div>
+          </div>
+          {% endif %}
+          <form method="post" action="{% url 'tecnico_completar_cita' cita_en_curso.id_cita %}" enctype="multipart/form-data" id="form-completar-visita">
+            {% csrf_token %}
+            <div class="mb-3">
+              <label class="form-label fw-semibold"><i class="bi bi-journal-text"></i> Resolución aplicada</label>
+              <textarea name="solucion_aplicada" class="form-control" rows="4" placeholder="Describe la solución realizada">{{ reclamo.solucion_aplicada }}</textarea>
+            </div>
+            <div class="mb-3">
+              <label class="form-label fw-semibold"><i class="bi bi-camera"></i> Subir fotos</label>
+              <div id="evidencias-independientes"></div>
+              <button type="button" class="btn btn-sm btn-outline-primary mb-2" onclick="agregarCampoEvidencia()"><i class="bi bi-plus-circle"></i> Agregar foto</button>
+            </div>
+            <div class="mb-3" style="width:100%; display:flex; justify-content:flex-start; align-items:center; margin:0; padding:0;">
+                <div style="display:flex; flex-direction:column; align-items:flex-start; width:100%;">
+                  <button type="button" class="btn btn-outline-primary mb-2" id="btnMostrarMateriales" onclick="toggleMaterialesTabla()" style="margin-left:18px; margin-top:48px;">
+                    <i class="bi bi-list-check"></i> Seleccionar materiales
+                  </button>
+                  <div class="form-check mb-4" style="margin-left:18px; margin-top:18px;">
+                    <input class="form-check-input" type="checkbox" id="marcarResuelto" name="marcar_resuelto">
+                    <label class="form-check-label" for="marcarResuelto" style="margin-left:0px;">
+                          Marcar reclamo como resuelto
+                    </label>
+                  </div>
+                </div>
+<style>
+  #btnMostrarMateriales {
+    margin-top: 48px !important;
+  }
+</style>
+                </button>
+
+            </div>
+            <div class="table-responsive" id="tablaMateriales" style="display:none; transition:all 0.3s;">
+              <div style="position:relative; width:350px; margin-bottom:10px; margin-left:18px;">
+                <input type="text" id="buscadorMateriales" class="form-control mb-2 buscador-materiales-input" placeholder="Buscar materiales..." onkeyup="filtrarMateriales()" style="padding-left:36px;">
+                <span style="position:absolute; left:10px; top:50%; transform:translateY(-50%); color:#888; font-size:18px; pointer-events:none;">
+                  <i class="bi bi-search"></i>
+                </span>
+              </div>
+              <table class="table table-bordered align-middle" style="font-size:0.98rem;">
+                <thead>
+                  <tr class="table-light">
+                    <th style="width:40px;"></th>
+                    <th>Material</th>
+                    <th>Cantidad utilizada</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for material in materiales_disponibles %}
+                  <tr>
+                    <td>
+                      <input type="checkbox" class="form-check-input" name="material_usado_{{ material.id_material }}" id="matcheck{{ material.id_material }}" onchange="toggleCantidadInput({{ material.id_material }})">
+                    </td>
+                    <td>
+                      <label for="matcheck{{ material.id_material }}" style="cursor:pointer;">{{ material.nombre }} <span class="text-muted" style="font-size:0.9em;">({{ material.unidad_medida }})</span></label>
+                    </td>
+
+                    <td>
+                      <div class="input-group" style="max-width: 160px;">
+                        <input type="number" name="material_cantidad_{{ material.id_material }}" id="matcant{{ material.id_material }}" class="form-control text-end" min="1" disabled>
+                        <span class="input-group-text" id="unidad-{{ material.id_material }}" style="min-width:60px; justify-content: flex-end;">{{ material.unidad_medida }}</span>
+                      </div>
+                    </td>
+                  </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+            <script>
+            function toggleCantidadInput(id) {
+              var check = document.getElementById('matcheck'+id);
+              var input = document.getElementById('matcant'+id);
+              input.disabled = !check.checked;
+              if (!check.checked) input.value = '';
+            }
+            function toggleMaterialesTabla() {
+              var tabla = document.getElementById('tablaMateriales');
+              if (tabla.style.display === 'none') {
+                tabla.style.display = 'block';
+              } else {
+                tabla.style.display = 'none';
+              }
+            }
+                function filtrarMateriales() {
+                  var input = document.getElementById('buscadorMateriales');
+                  var filtro = input.value.toLowerCase();
+                  var tabla = document.getElementById('tablaMateriales');
+                  var filas = tabla.getElementsByTagName('tr');
+                  for (var i = 1; i < filas.length; i++) { // i=1 para saltar encabezado
+                    var nombre = filas[i].getElementsByTagName('td')[1];
+                    if (nombre) {
+                      var txt = nombre.textContent || nombre.innerText;
+                      filas[i].style.display = txt.toLowerCase().includes(filtro) ? '' : 'none';
+                    }
+                  }
+                }
+            </script>
+
+            <!-- SECCIÓN: RETIRO DE ESCOMBROS -->
+            <div class="card-custom" style="margin-top: 30px;">
+              <div class="card-header-custom">
+                <i class="bi bi-trash"></i>
+                <span>Retiro de Escombros</span>
+              </div>
+              <div class="card-body">
+                <p class="mb-3"><strong>¿Requiere retiro de escombros?</strong></p>
+                <div class="mb-3">
+                  <div class="form-check form-check-inline">
+                    <input class="form-check-input" type="radio" id="requiere_escombro_si" name="requiere_escombro" value="on" onchange="toggleSeccionEscombros()">
+                    <label class="form-check-label" for="requiere_escombro_si">
+                      <strong>Sí</strong>
+                    </label>
+                  </div>
+                  <div class="form-check form-check-inline">
+                    <input class="form-check-input" type="radio" id="requiere_escombro_no" name="requiere_escombro" onchange="toggleSeccionEscombros()">
+                    <label class="form-check-label" for="requiere_escombro_no">
+                      <strong>No</strong>
+                    </label>
+                  </div>
+                </div>
+
+                <div id="seccion-escombros" style="display: none; background: #f8f9fa; padding: 20px; border-radius: 10px; border-left: 4px solid var(--color-primary);">
+                  <div class="row mb-3">
+                    <div class="col-md-6">
+                      <label for="tipo_escombro" class="form-label"><i class="bi bi-tag"></i> Tipo de Escombro</label>
+                      <select class="form-select" id="tipo_escombro" name="tipo_escombro" disabled>
+                        <option value="">-- Seleccionar tipo --</option>
+                        <option value="construccion">Construcción</option>
+                        <option value="muebles_madera">Muebles o madera</option>
+                        <option value="metales">Metales</option>
+                        <option value="plasticos_carton">Plásticos / cartón</option>
+                        <option value="vidrio">Vidrio</option>
+                        <option value="mixto">Mixto</option>
+                        <option value="otro">Otro</option>
+                      </select>
+                    </div>
+                    <div class="col-md-6">
+                      <label for="volumen_escombro" class="form-label"><i class="bi bi-archive"></i> Volumen estimado (m³)</label>
+                      <input type="number" class="form-control" id="volumen_escombro" name="volumen_escombro" step="0.1" min="0" placeholder="0.0" disabled required>
+                    </div>
+                  </div>
+
+                  <div class="mb-3">
+                    <label for="ubicacion_escombro" class="form-label"><i class="bi bi-geo-alt"></i> Ubicación exacta</label>
+                    <textarea class="form-control" id="ubicacion_escombro" name="ubicacion_escombro" rows="2" placeholder="Punto exacto donde se deberán retirar los escombros..." disabled required></textarea>
+                  </div>
+
+                  <div class="mb-3">
+                    <label for="observaciones_escombro" class="form-label"><i class="bi bi-chat-left-text"></i> Observaciones (opcional)</label>
+                    <textarea class="form-control" id="observaciones_escombro" name="observaciones_escombro" rows="2" placeholder="Información adicional relevante..." disabled></textarea>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <script>
+            function toggleSeccionEscombros() {
+              var radioSi = document.getElementById('requiere_escombro_si');
+              var seccion = document.getElementById('seccion-escombros');
+              var inputs = seccion.querySelectorAll('input, textarea, select');
+              
+              if (radioSi && radioSi.checked) {
+                seccion.style.display = 'block';
+                inputs.forEach(function(input) {
+                  input.disabled = false;
+                });
+              } else {
+                seccion.style.display = 'none';
+                inputs.forEach(function(input) {
+                  input.disabled = true;
+                  input.value = '';
+                });
+              }
+            }
+            </script>
+
+            <div class="form-check mb-4">
+            <!-- Eliminado: el checkbox ahora está alineado junto al botón -->
+            <div class="text-end pe-4">
+              <button type="button" class="btn btn-outline-primary ms-3 mt-0" style="margin-bottom: 18px;" data-bs-toggle="modal" data-bs-target="#tecnicoReagendarModal">
+                <i class="bi bi-calendar-plus"></i> 
+                {% if cita_en_curso %}Agendar nueva cita{% else %}Reagendar visita{% endif %}
+              </button>
+              <button type="submit" class="btn btn-success-custom mt-0" style="margin-bottom: 18px;"><i class="bi bi-check2-circle"></i> Completar visita</button>
+            </div>
+
+<script>
+// Recargar página después de completar visita
+document.addEventListener('DOMContentLoaded', function() {
+  const formCompletar = document.getElementById('form-completar-visita');
+  if (formCompletar) {
+    formCompletar.addEventListener('submit', function() {
+      // Recargar después de 500ms para permitir que se procese la solicitud
+      setTimeout(function() {
+        window.location.href = window.location.href.split('?')[0] + '?t=' + Date.now();
+      }, 500);
+    });
+  }
+});
+</script>
+
+<script>
+document.addEventListener('DOMContentLoaded', function(){
+  var modalEl = document.getElementById('tecnicoReagendarModal');
+  if (!modalEl) return;
+  
+  // Cargar horarios disponibles al abrir el modal
+  modalEl.addEventListener('show.bs.modal', function(){
+    var tecnicoId = modalEl.dataset.tecnicoId;
+    var citaId = modalEl.dataset.citaId;
+    var fechaActual = modalEl.dataset.fechaActual;
+    var horaActual = modalEl.dataset.horaActual;
+    var container = document.getElementById('slots-container-tecnico');
+    container.innerHTML = '<div class="d-flex align-items-center text-muted"><div class="spinner-border spinner-border-sm me-2" role="status"></div>Cargando horarios disponibles...</div>';
+    fetch(`/api/tecnicos/?tecnico_id=${tecnicoId}&excluir_cita_id=${citaId}`, { headers: { 'X-Requested-With': 'XMLHttpRequest' }} )
+      .then(r => r.json())
+      .then(data => {
+        var tecnico = data.tecnicos && data.tecnicos[0];
+        if (!tecnico || !tecnico.proximos_horarios || tecnico.proximos_horarios.length === 0) {
+          container.innerHTML = '<div class="alert alert-info mb-0">No hay horarios disponibles próximamente para este técnico. Intenta más tarde.</div>';
+          return;
+        }
+        var horariosDisponibles = tecnico.proximos_horarios.filter(h => {
+          var horarioInicio = h.hora_inicio.substring(0, 5);
+          return !(h.fecha === fechaActual && horarioInicio === horaActual);
+        });
+        if (horariosDisponibles.length === 0) {
+          container.innerHTML = '<div class="alert alert-info mb-0">No hay otros horarios disponibles próximamente para este técnico. Intenta más tarde.</div>';
+          return;
+        }
+        var horariosPorFecha = {};
+        horariosDisponibles.forEach(h => {
+          if (!horariosPorFecha[h.fecha]) horariosPorFecha[h.fecha] = [];
+          horariosPorFecha[h.fecha].push(h);
+        });
+        var list = document.createElement('div');
+        list.className = 'list-group';
+        var fechasOrdenadas = Object.keys(horariosPorFecha).sort().slice(0, 7);
+        fechasOrdenadas.forEach(fecha => {
+          var horarios = horariosPorFecha[fecha];
+          var fechaObj = new Date(fecha + 'T00:00:00');
+          var opciones = { weekday: 'long', day: 'numeric', month: 'long' };
+          var fechaFormateada = fechaObj.toLocaleDateString('es-CL', opciones).replace(',', '');
+          horarios.forEach(h => {
+            var label = document.createElement('label');
+            label.className = 'list-group-item d-flex align-items-center';
+            var input = document.createElement('input');
+            input.type = 'radio';
+            input.name = 'slot';
+            input.required = true;
+            input.className = 'form-check-input me-2';
+            input.value = `${fecha}|${h.hora_inicio}`;
+            input.addEventListener('change', function(){
+              var btnConfirmar = document.getElementById('btn-confirmar-tecnico');
+              btnConfirmar.disabled = false;
+              btnConfirmar.dataset.fechaSeleccionada = fechaFormateada;
+              btnConfirmar.dataset.horaInicio = h.hora_inicio.substring(0, 5);
+              btnConfirmar.dataset.horaFin = h.hora_fin ? h.hora_fin.substring(0, 5) : '';
+            });
+            var span = document.createElement('span');
+            var horaInicio = h.hora_inicio.substring(0, 5);
+            var horaFin = h.hora_fin ? h.hora_fin.substring(0, 5) : '';
+            span.innerHTML = `<strong>${fechaFormateada}</strong> <span class='ms-2'><i class='bi bi-clock'></i> ${horaInicio}${horaFin ? ' - ' + horaFin : ''}</span>`;
+            label.appendChild(input);
+            label.appendChild(span);
+            list.appendChild(label);
+          });
+        });
+        container.innerHTML = '';
+        container.appendChild(list);
+      })
+      .catch(() => {
+        container.innerHTML = '<div class="alert alert-warning mb-0">No fue posible cargar los horarios. Reintenta o usa la página de reagendar.</div>';
+      });
+  });
+  
+  // Manejar el envío AJAX del formulario de reagendar
+  var formReagendar = document.getElementById('form-reagendar-tecnico');
+  if (formReagendar) {
+    formReagendar.addEventListener('submit', function(e) {
+      e.preventDefault();
+      
+      var formData = new FormData(this);
+      var slot = formData.get('slot');
+      
+      if (!slot) {
+        alert('Por favor selecciona un horario');
+        return;
+      }
+      
+      fetch(this.action, {
+        method: 'POST',
+        headers: {
+          'X-Requested-With': 'XMLHttpRequest',
+          'X-CSRFToken': formData.get('csrfmiddlewaretoken')
+        },
+        body: formData
+      })
+      .then(r => r.json())
+      .then(data => {
+        if (data.success) {
+          // Cerrar modal y mostrar mensaje de éxito
+          var modal = bootstrap.Modal.getInstance(modalEl);
+          if (modal) modal.hide();
+          
+          // Mostrar mensaje de éxito
+          var alertDiv = document.createElement('div');
+          alertDiv.className = 'alert alert-success alert-dismissible fade show';
+          alertDiv.role = 'alert';
+          alertDiv.innerHTML = `
+            <i class="bi bi-check-circle"></i> Cita reagendada exitosamente. La visita técnica sigue activa.
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Cerrar"></button>
+          `;
+          
+          // Insertar alerta en el top de la página
+          var container = document.querySelector('.container.py-4');
+          if (container) {
+            container.insertBefore(alertDiv, container.firstChild);
+          }
+          
+          // Auto-dismiss alerta después de 5 segundos
+          setTimeout(() => {
+            alertDiv.remove();
+          }, 5000);
+        } else {
+          alert('Error al reagendar: ' + (data.message || 'Error desconocido'));
+        }
+      })
+      .catch(err => {
+        console.error('Error:', err);
+        alert('Error al reagendar la cita');
+      });
+    });
+  }
+});
+</script>
+            </div>
+          </form>
+        </div>
+
+      {% endif %}
+
+      <!-- Modal para reagendar visita técnica - COMPLETAMENTE INDEPENDIENTE -->
+      {% if cita_en_curso %}
+      <div class="modal fade reagendar-modal" id="tecnicoReagendarModal" tabindex="-1" aria-labelledby="tecnicoReagendarLabel" aria-hidden="true"
+           data-tecnico-id="{{ tecnico.id_tecnico }}"
+           data-cita-id="{{ cita_en_curso.id_cita }}"
+           data-fecha-actual="{{ cita_en_curso.fecha_programada|date:'Y-m-d' }}"
+           data-hora-actual="{{ cita_en_curso.fecha_programada|time:'H:i' }}">
+        <div class="modal-dialog modal-dialog-centered">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h5 class="modal-title" id="tecnicoReagendarLabel"><i class="bi bi-calendar-week"></i> Reagendar cita</h5>
+              <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <form method="post" action="{% if cita_en_curso %}{% url 'agendar_nueva_cita_tecnico' cita_en_curso.id_cita %}{% else %}{% url 'reagendar_cita' cita_en_curso.id_cita %}{% endif %}" id="form-reagendar-tecnico">
+              {% csrf_token %}
+              <div class="modal-body">
+                <br>
+                <p class="mb-2">Selecciona un nuevo horario disponible:</p>
+                <div id="slots-container-tecnico" class="mb-2">
+                  <div class="d-flex align-items-center text-muted">
+                    <div class="spinner-border spinner-border-sm me-2" role="status"></div>
+                    Cargando horarios disponibles...
+                  </div>
+                </div>
+              </div>
+              <div class="modal-footer d-flex justify-content-end align-items-center gap-2">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cerrar</button>
+                <button type="submit" class="btn btn-confirmar" id="btn-confirmar-tecnico" disabled>Confirmar</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+      {% endif %}
+
+      <div class="card-custom">
+        <div class="card-header-custom">
+          <i class="bi bi-file-earmark-text"></i>
+          <span>Detalle del Reclamo</span>
+        </div>
+        <div class="card-body">
+          <div class="d-flex justify-content-between align-items-center mb-3">
+            <h5 class="fw-bold mb-0">Folio: 
+              <span class="text-primary">{{ reclamo.numero_folio }}</span>
+            </h5>
+            {% if reclamo.estado == 'resuelto' %}
+              <span class="badge badge-estado badge-estado-{{ reclamo.estado }}" style="background: #d1e7dd; color: #0f5132; font-size: 1rem; padding: 10px 16px;">
+                ✓ {{ reclamo.get_estado_display }}
+              </span>
+            {% elif cita_mas_reciente %}
+              <span class="badge badge-estado badge-estado-{{ cita_mas_reciente.estado }}">
+                {{ cita_mas_reciente.get_estado_display }}
+              </span>
+            {% else %}
+              <span class="badge badge-estado badge-estado-{{ reclamo.estado }}">
+                {% if reclamo.estado == 'cancelado' %}Cancelada{% else %}{{ reclamo.get_estado_display }}{% endif %}
+              </span>
+            {% endif %}
+          </div>
+
+          {% if reclamo.fecha_resolucion %}
+          <div class="alert alert-success py-2 px-3 mb-3" style="border-left: 4px solid #198754; border-radius: 8px;">
+            <i class="bi bi-check2-circle"></i>
+            Resuelto el <strong>{{ reclamo.fecha_resolucion|date:"d/m/Y H:i" }}</strong>
+          </div>
+          {% endif %}
+
+          <div class="detalle-cuadro">
+            <div class="detalle-fila">
+              <div class="detalle-label"><i class="bi bi-person"></i>  Propietario</div>
+              <div class="detalle-valor">{{ reclamo.propietario.nombre }}</div>
+            </div>
+            <div class="detalle-fila">
+              <div class="detalle-label"><i class="bi bi-credit-card"></i> RUT</div>
+              <div class="detalle-valor">{{ reclamo.propietario.rut|default:"No especificado" }}</div>
+            </div>
+            <div class="detalle-fila">
+              <div class="detalle-label"><i class="bi bi-envelope"></i> Email</div>
+              <div class="detalle-valor">{{ reclamo.propietario.email|default:"No especificado" }}</div>
+            </div>
+            <div class="detalle-fila">
+              <div class="detalle-label"><i class="bi bi-telephone"></i> Teléfono</div>
+              <div class="detalle-valor">{{ reclamo.propietario.telefono|default:"No especificado" }}</div>
+            </div>
+            <div class="detalle-fila">
+              <div class="detalle-label"><i class="bi bi-building"></i> Proyecto</div>
+              <div class="detalle-valor">
+                {% if reclamo.proyecto %}
+                  {{ reclamo.proyecto }}
+                {% else %}
+                  <span class="text-primary">Sin proyecto asignado</span>
+                {% endif %}
+              </div>
+            </div>
+            <div class="detalle-fila">
+              <div class="detalle-label"><i class="bi bi-geo-alt"></i> Dirección</div>
+              <div class="detalle-valor">
+                {% if reclamo.proyecto and reclamo.proyecto.direccion %}
+                  {{ reclamo.proyecto.direccion }}
+                {% else %}
+                  <span class="text-primary">Sin dirección</span>
+                {% endif %}
+              </div>
+            </div>
+            <div class="detalle-fila">
+              <div class="detalle-label"><i class="bi bi-house"></i> Unidad</div>
+              <div class="detalle-valor">
+                {% if reclamo.propietario.unidades.exists %}
+                  {{ reclamo.propietario.unidades.first.nombre }}
+                {% else %}
+                  {{ reclamo.propietario.unidad|default:"Sin unidad" }}
+                {% endif %}
+              </div>
+            </div>
+            <div class="detalle-fila">
+              <div class="detalle-label"><i class="bi bi-tag"></i> Categoría</div>
+              <div class="detalle-valor">{{ reclamo.categoria.nombre }}</div>
+            </div>
+            <div class="detalle-fila">
+              <div class="detalle-label"><i class="bi bi-calendar3"></i> Fecha de creación</div>
+              <div class="detalle-valor">{{ reclamo.fecha_ingreso|date:"d/m/Y H:i" }}</div>
+            </div>
+            <div class="detalle-fila">
+              <div class="detalle-label"><i class="bi bi-card-text"></i> Descripción</div>
+              <div class="detalle-valor">{{ reclamo.descripcion }}</div>
+            </div>
+            <div class="detalle-fila">
+              <div class="detalle-label"><i class="bi bi-tools"></i> Técnico asignado</div>
+              <div class="detalle-valor">
+                {% if reclamo.tecnico_asignado and reclamo.tecnico_asignado.nombre %}
+                  {{ reclamo.tecnico_asignado.nombre }}
+                {% else %}
+                  <span class="text-primary">Pendiente de asignación</span>
+                {% endif %}
+              </div>
+            </div>
+            {% if visita_en_curso and visita_en_curso.fecha_cierre and reclamo.horas_trabajadas %}
+            <div class="detalle-fila">
+              <div class="detalle-label"><i class="bi bi-hourglass-split"></i> Horas trabajadas</div>
+              <div class="detalle-valor">{{ reclamo.horas_trabajadas }} horas</div>
+            </div>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+
+      <!-- Evidencias del Reclamo (cliente) -->
+      <div class="card-custom">
+        <div class="card-header-custom" style="background: linear-gradient(135deg, #2b6a6a, #1a4d4d);">
+          <i class="bi bi-images"></i>
+          <span>Evidencias del Reclamo</span>
+        </div>
+        <div class="card-body">
+          {% if archivos_cliente %}
+            <div class="evidencias-container">
+              {% for archivo in archivos_cliente %}
+                {% if archivo.tipo == 'image' or archivo.archivo.url|lower|slice:"-4:" == ".jpg" or archivo.archivo.url|lower|slice:"-5:" == ".jpeg" or archivo.archivo.url|lower|slice:"-4:" == ".png" or archivo.archivo.url|lower|slice:"-4:" == ".gif" %}
+                  <div class="miniatura-container">
+                    <a href="{{ archivo.archivo.url }}" target="_blank" onclick="abrirVisorImagen('{{ archivo.archivo.url }}'); return false;" style="text-decoration: none;">
+                      <div style="position: relative;">
+                        <img src="{{ archivo.archivo.url }}" alt="Evidencia {{ forloop.counter }}" class="img-evidencia" style="cursor:pointer; max-width: 220px; max-height: 160px; border-radius: 8px; object-fit: cover;">
+                        <div style="position: absolute; top: 8px; right: 8px; background: rgba(0,0,0,0.6); color: white; padding: 4px 8px; border-radius: 4px; font-size: 0.75rem;">
+                          <i class="bi bi-zoom-in"></i> Ver
+                        </div>
+                      </div>
+                    </a>
+                    {% if archivo.descripcion %}
+                      <p class="card-text">{{ archivo.descripcion }}</p>
+                    {% endif %}
+                  </div>
+                {% elif archivo.tipo and 'video' in archivo.tipo %}
+                  <div class="miniatura-container">
+                    <video controls style="max-width: 220px; max-height: 160px; object-fit: cover; border-radius: 8px;">
+                      <source src="{{ archivo.archivo.url }}" type="video/mp4">
+                      Tu navegador no soporta video.
+                    </video>
+                    {% if archivo.descripcion %}
+                      <p class="card-text">{{ archivo.descripcion }}</p>
+                    {% endif %}
+                  </div>
+                {% else %}
+                  <div class="miniatura-container" style="text-align: center; padding: 20px;">
+                    <i class="bi bi-file-earmark-text" style="font-size: 3rem; color: #6c757d;"></i>
+                    <p style="margin-top: 8px; margin-bottom: 8px;">
+                      <a href="{{ archivo.archivo.url }}" target="_blank" class="btn btn-sm btn-outline-primary">
+                        <i class="bi bi-download"></i> Descargar archivo
+                      </a>
+                    </p>
+                    {% if archivo.descripcion %}
+                      <p class="card-text">{{ archivo.descripcion }}</p>
+                    {% endif %}
+                  </div>
+                {% endif %}
+              {% endfor %}
+            </div>
+          {% else %}
+            <div class="alert alert-warning"><i class="bi bi-exclamation-triangle"></i> No hay evidencias asociadas a este reclamo.</div>
+          {% endif %}
+        </div>
+      </div>
+
+      {% if bitacoras %}
+      <div class="card-custom">
+        <div class="card-header-custom" style="background: linear-gradient(135deg, #6c757d, #495057);">
+          <i class="bi bi-activity"></i>
+          <span>Actividad reciente</span>
+        </div>
+        <div class="card-body">
+          <ul class="list-group list-group-flush">
+            {% for b in bitacoras %}
+              <li class="list-group-item d-flex justify-content-between align-items-start">
+                <div class="ms-2 me-auto">
+                  <div class="fw-semibold">
+                    {% if b.accion == 'confirmada' %}<i class="bi bi-check2-square text-success"></i>{% endif %}
+                    {% if b.accion == 'reprogramada' %}<i class="bi bi-arrow-repeat text-info"></i>{% endif %}
+                    {% if b.accion == 'cancelada' %}<i class="bi bi-x-circle text-danger"></i>{% endif %}
+                    {% if b.accion == 'completada' %}<i class="bi bi-clipboard-check text-success"></i>{% endif %}
+                    {% if b.accion == 'nota' %}<i class="bi bi-info-circle text-muted"></i>{% endif %}
+                    {{ b.get_accion_display }}
+                    {% if b.cita_id %}
+                      <small class="text-muted">(cita #{{ b.cita_id }})</small>
+                    {% endif %}
+                  </div>
+                  {% if b.detalle %}
+                    <div class="text-muted small mt-1">{{ b.detalle }}</div>
+                  {% endif %}
+                </div>
+                <span class="badge text-bg-light">{{ b.fecha|date:"d/m/Y H:i" }}</span>
+              </li>
+            {% endfor %}
+          </ul>
+        </div>
+      </div>
+      {% endif %}
+
+      {% if visita_detalle %}
+      <div class="card-custom">
+        <div class="card-header-custom" style="background: linear-gradient(135deg, #198754, #0f5132);">
+          <i class="bi bi-clipboard-check"></i>
+          <span>Datos de la Visita Técnica</span>
+        </div>
+        <div class="card-body">
+          <div class="detalle-cuadro">
+            {% if visita_detalle.fecha_visita %}
+            <div class="detalle-fila">
+              <div class="detalle-label"><i class="bi bi-calendar-event"></i> Fecha de Visita</div>
+              <div class="detalle-valor">{{ visita_detalle.fecha_visita|date:"d/m/Y H:i" }}</div>
+            </div>
+            {% endif %}
+            {% if reclamo.resolucion %}
+            <div class="detalle-fila">
+              <div class="detalle-label"><i class="bi bi-check2-square"></i> Resolución</div>
+              <div class="detalle-valor valor-resolucion">
+                {{ reclamo.resolucion|linebreaksbr }}
+              </div>
+            </div>
+            {% endif %}
+            {% if visita_detalle.observaciones %}
+            <div class="detalle-fila">
+              <div class="detalle-label"><i class="bi bi-chat-left-text"></i> Comentarios de Resolución</div>
+              <div class="detalle-valor">{{ visita_detalle.observaciones|linebreaksbr }}</div>
+            </div>
+            {% endif %}
+          </div>
+
+          {% if archivos_visita %}
+          <h6 class="mt-4 mb-3"><i class="bi bi-images"></i> Imágenes de la Visita</h6>
+          <div class="evidencias-container">
+            {% for archivo in archivos_visita %}
+              {% if archivo.tipo and 'image' in archivo.tipo or archivo.archivo.url|lower|slice:"-4:" == ".jpg" or archivo.archivo.url|lower|slice:"-5:" == ".jpeg" or archivo.archivo.url|lower|slice:"-4:" == ".png" or archivo.archivo.url|lower|slice:"-4:" == ".gif" %}
+                <div class="miniatura-container">
+                  <a href="{{ archivo.archivo.url }}" target="_blank" onclick="abrirVisorImagen('{{ archivo.archivo.url }}'); return false;" style="text-decoration: none;">
+                    <div style="position: relative;">
+                      <img src="{{ archivo.archivo.url }}" alt="Evidencia {{ forloop.counter }}" class="img-evidencia" style="cursor:pointer; max-width: 220px; max-height: 160px; border-radius: 8px; object-fit: cover;">
+                      <div style="position: absolute; top: 8px; right: 8px; background: rgba(0,0,0,0.6); color: white; padding: 4px 8px; border-radius: 4px; font-size: 0.75rem;">
+                        <i class="bi bi-zoom-in"></i> Ver
+                      </div>
+                    </div>
+                  </a>
+                  {% if archivo.descripcion %}
+                    <p class="card-text">{{ archivo.descripcion }}</p>
+                  {% endif %}
+                </div>
+              {% endif %}
+            {% endfor %}
+          </div>
+          {% endif %}
+
+          {% if visita_detalle.usos_materiales.all %}
+          <h6 class="mt-4 mb-3"><i class="bi bi-tools"></i> Materiales Utilizados</h6>
+          <div class="table-responsive">
+            <table class="table table-sm table-bordered">
+              <thead class="table-light">
+                <tr>
+                  <th>Materiales</th>
+                  <th>Cantidades Utilizadas</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for uso in visita_detalle.usos_materiales.all %}
+                <tr>
+                  <td>{{ uso.id_material.nombre }}</td>
+                  <td>{{ uso.cantidad_usada }} {{ uso.id_material.unidad_medida }}s</td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+          {% endif %}
+        </div>
+      </div>
+      {% endif %}
+
+      <div class="text-end mt-3">
+        <a href="{% url 'tecnico_dashboard' %}" class="btn btn-outline-primary">
+          <i class="bi bi-arrow-left"></i> Volver al dashboard
+        </a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="visor" onclick="cerrarVisor()">
+  <img src="" alt="Vista ampliada" style="display:none;">
+  <video controls style="display:none;"></video>
+  </div>
+
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Mostrar/ocultar el formulario de reprogramación
+function mostrarReagendar() {
+  var div = document.getElementById('reagendar-visita');
+  div.style.display = (div.style.display === 'none') ? 'block' : 'none';
+}
+// === Evidencias independientes tipo "crear reclamo" con descripción ===
+function agregarCampoEvidencia() {
+  const contenedor = document.getElementById('evidencias-independientes');
+  const idx = contenedor.children.length;
+  const campo = document.createElement('div');
+  campo.className = 'mb-2 d-flex align-items-center';
+  campo.innerHTML = `
+    <input type="file" name="evidencia_tecnico_${idx}" accept="image/*" class="form-control me-2" style="max-width:220px;" onchange="mostrarMiniaturaIndividual(this)">
+    <div class="miniatura-individual" style="margin-right:10px;"></div>
+  <textarea name="descripcion_evidencia_${idx}" class="form-control ms-2" rows="2" style="width:320px; min-width:220px; max-width:100%; resize:horizontal;" placeholder="Descripción de la foto"></textarea>
+    <button type="button" class="btn btn-sm btn-outline-danger ms-2" onclick="this.parentNode.remove()"><i class="bi bi-trash"></i></button>
+  `;
+  contenedor.appendChild(campo);
+}
+
+function mostrarMiniaturaIndividual(input) {
+  const preview = input.parentNode.querySelector('.miniatura-individual');
+  preview.innerHTML = '';
+  if (input.files && input.files[0] && input.files[0].type.startsWith('image/')) {
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      const img = document.createElement('img');
+      img.src = e.target.result;
+  img.style.width = '120px';
+  img.style.height = '90px';
+  img.style.borderRadius = '8px';
+  img.style.boxShadow = '0 2px 8px rgba(0,0,0,0.12)';
+  img.style.objectFit = 'cover';
+  img.alt = 'Miniatura';
+  preview.appendChild(img);
+    };
+    reader.readAsDataURL(input.files[0]);
+  }
+}
+
+// Inicializa con un campo por defecto
+document.addEventListener('DOMContentLoaded', function() {
+  if (document.getElementById('evidencias-independientes').children.length === 0) {
+    agregarCampoEvidencia();
+  }
+});
+// === Miniaturas de fotos seleccionadas ===
+function mostrarMiniaturas(input) {
+  const contenedor = document.getElementById('miniaturas-evidencias');
+  contenedor.innerHTML = '';
+  if (input.files) {
+    Array.from(input.files).forEach(file => {
+      if (file.type.startsWith('image/')) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+          const img = document.createElement('img');
+          img.src = e.target.result;
+          img.style.maxWidth = '110px';
+          img.style.maxHeight = '90px';
+          img.style.borderRadius = '8px';
+          img.style.boxShadow = '0 2px 8px rgba(0,0,0,0.12)';
+          img.style.objectFit = 'cover';
+          img.alt = 'Miniatura';
+          contenedor.appendChild(img);
+        };
+        reader.readAsDataURL(file);
+      }
+    });
+  }
+}
+// === Cronómetro de visita técnica ===
+{% if cita_en_curso and visita_en_curso %}
+// Muestra el tiempo transcurrido desde el inicio de la visita
+var inicioVisita = new Date("{{ visita_en_curso.fecha_visita|date:'Y-m-d H:i:s' }}".replace(' ', 'T'));
+function pad(n) { return n < 10 ? '0'+n : n; }
+function actualizarCronometro() {
+  var ahora = new Date();
+  var diff = Math.floor((ahora - inicioVisita) / 1000);
+  var h = Math.floor(diff/3600);
+  var m = Math.floor((diff%3600)/60);
+  var s = diff%60;
+  document.getElementById('cronometro').textContent = pad(h)+":"+pad(m)+":"+pad(s);
+}
+setInterval(actualizarCronometro, 1000);
+actualizarCronometro();
+{% endif %}
+
+// === Materiales: selección y filtrado ===
+// Habilita/deshabilita el input de cantidad según el checkbox
+function toggleCantidadInput(id) {
+  var check = document.getElementById('matcheck'+id);
+  var input = document.getElementById('matcant'+id);
+  input.disabled = !check.checked;
+  if (!check.checked) input.value = '';
+}
+
+// Muestra/oculta la tabla de materiales
+function toggleMaterialesTabla() {
+  var tabla = document.getElementById('tablaMateriales');
+  tabla.style.display = (tabla.style.display === 'none') ? 'block' : 'none';
+}
+
+// Filtra materiales por nombre
+function filtrarMateriales() {
+  var input = document.getElementById('buscadorMateriales');
+  var filtro = input.value.toLowerCase();
+  var tabla = document.getElementById('tablaMateriales');
+  var filas = tabla.getElementsByTagName('tr');
+  for (var i = 1; i < filas.length; i++) { // i=1 para saltar encabezado
+    var nombre = filas[i].getElementsByTagName('td')[1];
+    if (nombre) {
+      var txt = nombre.textContent || nombre.innerText;
+      filas[i].style.display = txt.toLowerCase().includes(filtro) ? '' : 'none';
+    }
+  }
+}
+
+// === Evidencias: visor de imágenes y videos ===
+// Abre visor para imágenes
+function abrirVisorImagen(src) {
+  const visor = document.getElementById('visor');
+  const img = visor.querySelector('img');
+  const video = visor.querySelector('video');
+  video.pause(); video.style.display = 'none';
+  img.src = src; img.style.display = 'block';
+  visor.style.display = 'flex';
+  setTimeout(() => visor.classList.add('mostrar'), 10);
+}
+// Abre visor para videos
+function abrirVisorVideo(src) {
+  const visor = document.getElementById('visor');
+  const img = visor.querySelector('img');
+  const video = visor.querySelector('video');
+  img.style.display = 'none';
+  video.src = src; video.style.display = 'block';
+  visor.style.display = 'flex';
+  setTimeout(() => visor.classList.add('mostrar'), 10);
+  video.play();
+}
+// Cierra visor
+function cerrarVisor() {
+  const visor = document.getElementById('visor');
+  const img = visor.querySelector('img');
+  const video = visor.querySelector('video');
+  visor.classList.remove('mostrar');
+  setTimeout(() => {
+    visor.style.display = 'none';
+    img.src = ''; video.pause(); video.src = '';
+  }, 200);
+}
+// Permite cerrar visor con Escape
+document.addEventListener('keydown', e => { if (e.key === 'Escape') cerrarVisor(); });
+</script>
+{% endblock %}

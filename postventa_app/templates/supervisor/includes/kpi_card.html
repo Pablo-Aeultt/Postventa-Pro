@@ -1,0 +1,98 @@
+<!-- KPI Card - Versión Compacta para Grid -->
+{% load custom_filters %}
+<div class="card border-0 shadow-sm" style="background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%); position: relative; overflow: hidden;">
+    <!-- Top accent bar with gradient -->
+    <div style="position: absolute; top: 0; left: 0; right: 0; height: 4px; background: linear-gradient(90deg, {% if kpi.categoria == 'Cumplimiento' %}#0d6efd{% elif kpi.categoria == 'Capacidad' %}#6f42c1{% elif kpi.categoria == 'Eficiencia' %}#198754{% elif kpi.categoria == 'Calidad' %}#fd7e14{% elif kpi.categoria == 'Costo' %}#dc3545{% elif kpi.categoria == 'Análisis' %}#20c997{% else %}#6c757d{% endif %} 0%, rgba(0,0,0,0.1) 100%);"></div>
+    
+    <div class="card-body pt-4">
+        <!-- Header con categoría -->
+        <div class="d-flex justify-content-between align-items-start mb-3">
+            <h6 class="card-title mb-0 fw-600">{{ kpi.nombre }}</h6>
+            <span class="badge" style="background-color: {% if kpi.categoria == 'Cumplimiento' %}#0d6efd{% elif kpi.categoria == 'Capacidad' %}#6f42c1{% elif kpi.categoria == 'Eficiencia' %}#198754{% elif kpi.categoria == 'Calidad' %}#fd7e14{% elif kpi.categoria == 'Costo' %}#dc3545{% elif kpi.categoria == 'Análisis' %}#20c997{% else %}#6c757d{% endif %}; color: white;">
+                {{ kpi.categoria }}
+            </span>
+        </div>
+
+        <!-- Valor principal -->
+        <div class="mb-3">
+            {% if kpi.id == 'KPI_09' and kpi.datos_adicionales.categorias %}
+                <!-- KPI_09: Mostrar categoría con mayor frecuencia -->
+                {% with max_cat=kpi.datos_adicionales.categorias|first %}
+                <div class="kpi-value" style="color: #0d6efd;">
+                    {{ max_cat.porcentaje|floatformat:1 }}
+                </div>
+                <div class="kpi-unit">{{ kpi.unidad }}</div>
+                <small class="text-muted d-block mt-2">
+                    <i class="fas fa-info-circle"></i> Mayor: {{ max_cat.categoria }}
+                </small>
+                {% endwith %}
+            {% elif kpi.id == 'KPI_12' and kpi.datos_adicionales.total %}
+                <!-- KPI_12: Mostrar proporción pendientes/total -->
+                <div class="kpi-value" style="color: #0d6efd;">
+                    {{ kpi.datos_adicionales.pendientes }}/{{ kpi.datos_adicionales.total }}
+                </div>
+                <div class="kpi-unit">reclamos</div>
+                <small class="text-muted d-block mt-2">
+                    <i class="fas fa-info-circle"></i> Pendientes/Total
+                </small>
+            {% elif kpi.valor is not None %}
+                <div class="kpi-value" style="color: #0d6efd;">
+                    {% if kpi.valor|is_percentage %}
+                        {{ kpi.valor|floatformat:1 }}
+                    {% else %}
+                        {% if kpi.valor > 1000 %}
+                            {{ kpi.valor|floatformat:0 }}
+                        {% else %}
+                            {{ kpi.valor|floatformat:2 }}
+                        {% endif %}
+                    {% endif %}
+                </div>
+                <div class="kpi-unit">{{ kpi.unidad }}</div>
+                
+                <!-- Información adicional descriptiva -->
+                {% if kpi.id == 'KPI_01' and kpi.datos_adicionales.total %}
+                    <small class="text-muted d-block mt-2">
+                        <i class="fas fa-info-circle"></i> {{ kpi.datos_adicionales.cumplidas }}/{{ kpi.datos_adicionales.total }} citas cumplidas
+                    </small>
+                {% elif kpi.id == 'KPI_02' and kpi.datos_adicionales.citas %}
+                    <small class="text-muted d-block mt-2">
+                        <i class="fas fa-info-circle"></i> {{ kpi.datos_adicionales.citas }} citas / {{ kpi.datos_adicionales.tecnicos }} técnicos
+                    </small>
+                {% elif kpi.id == 'KPI_03' and kpi.datos_adicionales.total %}
+                    <small class="text-muted d-block mt-2">
+                        <i class="fas fa-info-circle"></i> {{ kpi.datos_adicionales.total }} reclamos resueltos
+                    </small>
+                {% elif kpi.id == 'KPI_04' and kpi.datos_adicionales.total %}
+                    <small class="text-muted d-block mt-2">
+                        <i class="fas fa-info-circle"></i> {{ kpi.datos_adicionales.cumplidas }}/{{ kpi.datos_adicionales.total }} citas cumplidas
+                    </small>
+                {% elif kpi.id == 'KPI_05' and kpi.datos_adicionales.total %}
+                    <small class="text-muted d-block mt-2">
+                        <i class="fas fa-info-circle"></i> {{ kpi.datos_adicionales.primera_visita }}/{{ kpi.datos_adicionales.total }} en primera visita
+                    </small>
+                {% elif kpi.id == 'KPI_06' and kpi.datos_adicionales.total %}
+                    <small class="text-muted d-block mt-2">
+                        <i class="fas fa-info-circle"></i> {{ kpi.datos_adicionales.reabiertos }} reabiertos de {{ kpi.datos_adicionales.total }}
+                    </small>
+                {% elif kpi.id == 'KPI_07' and kpi.datos_adicionales.costo_total %}
+                    <small class="text-muted d-block mt-2">
+                        <i class="fas fa-info-circle"></i> Total: ${{ kpi.datos_adicionales.costo_total|floatformat:0 }} en {{ kpi.datos_adicionales.total }} reclamos
+                    </small>
+                {% elif kpi.id == 'KPI_08' and kpi.datos_adicionales.reclamos %}
+                    <small class="text-muted d-block mt-2">
+                        <i class="fas fa-info-circle"></i> Total: ${{ kpi.datos_adicionales.costo_total|floatformat:0 }} en {{ kpi.datos_adicionales.reclamos }} casos
+                    </small>
+                {% endif %}
+            {% else %}
+                <div class="text-muted">
+                    <i class="fas fa-info-circle"></i> 
+                    {% if kpi.datos_adicionales.descripcion %}
+                        {{ kpi.datos_adicionales.descripcion }}
+                    {% else %}
+                        Sin datos
+                    {% endif %}
+                </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
