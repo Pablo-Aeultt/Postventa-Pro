@@ -26,7 +26,7 @@ SECRET_KEY = "django-insecure-#oabe1u-*og_ur@f=pbgkbgti3@iwwevm7(vl#16d&*m%@)5re
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ["postventa-pro.onrender.com", "127.0.0.1", "localhost"]
 
 
 # Application definition
