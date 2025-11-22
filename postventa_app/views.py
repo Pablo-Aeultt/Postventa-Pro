@@ -62,8 +62,21 @@ def registro(request):
 def login_view(request):
     """Login de usuarios"""
     if request.user.is_authenticated:
-        # Si ya está autenticado, redirigir a mis reclamos
+        # Si ya está autenticado, redirigir al dashboard correcto según su rol
+        if request.user.is_staff:
+            return redirect('admin:index')
+        
+        supervisor = get_supervisor_from_user(request.user)
+        if supervisor:
+            return redirect('dashboard_supervisor')
+        
+        tecnico = get_tecnico_from_user(request.user)
+        if tecnico:
+            return redirect('dashboard_tecnico')
+        
+        # Si es cliente/propietario
         return redirect('mis_reclamos')
+    
     if request.method == 'POST':
         form = AuthenticationForm(request, data=request.POST)
         if form.is_valid():
@@ -80,7 +93,6 @@ def login_view(request):
                 return redirect('dashboard_supervisor')
             
             # Si es técnico, redirigir a dashboard_tecnico
-            from .views import get_tecnico_from_user
             tecnico = get_tecnico_from_user(user)
             if tecnico:
                 return redirect('dashboard_tecnico')
