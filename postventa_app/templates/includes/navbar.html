@@ -2,10 +2,12 @@
     <div class="container-fluid px-3 px-lg-5">
         <!-- Logo/Brand -->
         <a class="navbar-brand" href="
-            {% if request.resolver_match.url_name|slice:':7' == 'tecnico' %}
-                {% url 'dashboard_tecnico' %}
+            {% if user.is_staff %}
+                /admin/
             {% elif request.resolver_match.url_name|slice:':10' == 'supervisor' or request.resolver_match.url_name == 'dashboard_supervisor' or request.resolver_match.url_name == 'dashboard_kpis' %}
                 {% url 'dashboard_supervisor' %}
+            {% elif request.resolver_match.url_name|slice:':7' == 'tecnico' or request.resolver_match.url_name == 'dashboard_tecnico' %}
+                {% url 'dashboard_tecnico' %}
             {% else %}
                 {% url 'mis_reclamos' %}
             {% endif %}
