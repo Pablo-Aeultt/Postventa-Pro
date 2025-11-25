@@ -1,0 +1,121 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Gestión de Técnicos - Admin{% endblock %}
+
+{% block extra_css %}
+<style>
+    .header-section {
+        background: linear-gradient(135deg, var(--color-primary), var(--color-secondary));
+        color: white;
+        padding: 30px;
+        border-radius: 12px;
+        margin-bottom: 30px;
+    }
+
+    .tecnico-card {
+        background: white;
+        padding: 20px;
+        border-radius: 10px;
+        margin-bottom: 15px;
+        border-left: 4px solid var(--color-primary);
+        box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    }
+
+    .especialidad-badge {
+        display: inline-block;
+        background: #e7f3ff;
+        color: #0066cc;
+        padding: 6px 12px;
+        border-radius: 20px;
+        font-size: 12px;
+        font-weight: 600;
+    }
+
+    .calificacion {
+        color: #ffc107;
+        font-weight: 600;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <!-- Header -->
+    <div class="header-section">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+            <div>
+                <h1 class="mb-2"><i class="bi bi-tools"></i> Gestión de Técnicos</h1>
+                <p class="mb-0">Total: <strong>{{ tecnicos|length }} técnicos registrados</strong></p>
+            </div>
+            <a href="{% url 'admin_crear_tecnico' %}" class="btn btn-light">
+                <i class="bi bi-plus-circle"></i> Crear Nuevo Técnico
+            </a>
+        </div>
+    </div>
+
+    <!-- Lista de Técnicos -->
+    {% if tecnicos %}
+        {% for tecnico in tecnicos %}
+            <div class="tecnico-card">
+                <div class="row align-items-center">
+                    <div class="col-md-6">
+                        <h5 class="mb-1">{{ tecnico.nombre }}</h5>
+                        <p class="mb-1 text-muted">
+                            <i class="bi bi-credit-card"></i> RUT: {{ tecnico.rut }}
+                        </p>
+                        <p class="mb-1 text-muted">
+                            <i class="bi bi-envelope"></i> {{ tecnico.email|default:"Sin email" }}
+                        </p>
+                        <p class="mb-1 text-muted">
+                            <i class="bi bi-telephone"></i> {{ tecnico.telefono|default:"Sin teléfono" }}
+                        </p>
+                    </div>
+                    <div class="col-md-3">
+                        {% if tecnico.especialidad %}
+                            <p class="mb-2">
+                                <span class="especialidad-badge">
+                                    {{ tecnico.especialidad.nombre }}
+                                </span>
+                            </p>
+                        {% endif %}
+                        {% if tecnico.zona_cobertura %}
+                            <p class="mb-1 text-muted"><small><strong>Zona:</strong> {{ tecnico.zona_cobertura }}</small></p>
+                        {% endif %}
+                        {% if tecnico.casos_activos %}
+                            <p class="mb-1 text-muted"><small><strong>Casos activos:</strong> {{ tecnico.casos_activos }}</small></p>
+                        {% endif %}
+                    </div>
+                    <div class="col-md-3 text-end">
+                        <p class="mb-2">
+                            <span class="calificacion">
+                                <i class="bi bi-star-fill"></i> {{ tecnico.calificacion_promedio }}
+                            </span>
+                        </p>
+                        <p class="mb-2">
+                            {% if tecnico.estado == 'activo' %}
+                                <span class="badge bg-success">Activo</span>
+                            {% else %}
+                                <span class="badge bg-danger">Inactivo</span>
+                            {% endif %}
+                        </p>
+                        <p class="mb-0">
+                            <a href="{% url 'admin_editar_tecnico' tecnico.id_tecnico %}" class="btn btn-sm btn-outline-primary">
+                                <i class="bi bi-pencil"></i> Editar
+                            </a>
+                            <a href="{% url 'admin_eliminar_tecnico' tecnico.id_tecnico %}" class="btn btn-sm btn-outline-danger">
+                                <i class="bi bi-trash"></i> Eliminar
+                            </a>
+                        </p>
+                    </div>
+                </div>
+            </div>
+        {% endfor %}
+    {% else %}
+        <div class="alert alert-info">
+            <i class="bi bi-info-circle"></i> No hay técnicos registrados en el sistema.
+        </div>
+    {% endif %}
+
+</div>
+{% endblock %}

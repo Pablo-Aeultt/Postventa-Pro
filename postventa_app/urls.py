@@ -77,6 +77,20 @@ urlpatterns = [
     path('api/kpis/export/', views.api_kpis_export, name='api_kpis_export'),
     path('api/kpis/export-csv/', views.export_kpis_csv, name='export_kpis_csv'),
     path('api/kpis/public/', views.api_kpis_export_public, name='api_kpis_public'),  # SIN autenticación para Power BI
+    
+    # Dashboard Administrador
+    path('administrador/', views.dashboard_admin, name='dashboard_admin'),
+    path('administrador-reclamos/', views.admin_reclamos, name='admin_reclamos'),
+    path('administrador-reclamo/<int:reclamo_id>/', views.admin_detalle_reclamo, name='admin_detalle_reclamo'),
+    path('administrador-usuarios/', views.admin_usuarios, name='admin_usuarios'),
+    path('administrador-crear-supervisor/', views.admin_crear_supervisor, name='admin_crear_supervisor'),
+    path('administrador-eliminar-supervisor/<int:supervisor_id>/', views.admin_eliminar_supervisor, name='admin_eliminar_supervisor'),
+    path('administrador-tecnicos/', views.admin_tecnicos, name='admin_tecnicos'),
+    path('administrador-crear-tecnico/', views.admin_crear_tecnico, name='admin_crear_tecnico'),
+    path('administrador-editar-tecnico/<int:tecnico_id>/', views.admin_editar_tecnico, name='admin_editar_tecnico'),
+    path('administrador-eliminar-tecnico/<int:tecnico_id>/', views.admin_eliminar_tecnico, name='admin_eliminar_tecnico'),
+    path('administrador-reportes/', views.admin_reportes, name='admin_reportes'),
+    path('administrador-costos/', views.admin_costos, name='admin_costos'),
 
     # Elimino la URL dashboard-propietario porque no existe la vista
 ]

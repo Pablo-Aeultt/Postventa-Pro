@@ -1,0 +1,163 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Gestión de Usuarios - Admin{% endblock %}
+
+{% block extra_css %}
+<style>
+    .header-section {
+        background: linear-gradient(135deg, var(--color-primary), var(--color-secondary));
+        color: white;
+        padding: 30px;
+        border-radius: 12px;
+        margin-bottom: 30px;
+    }
+
+    .usuario-card {
+        background: white;
+        padding: 20px;
+        border-radius: 10px;
+        margin-bottom: 15px;
+        border-left: 4px solid var(--color-primary);
+        box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        transition: all 0.3s;
+    }
+
+    .usuario-card:hover {
+        box-shadow: 0 4px 15px rgba(0,0,0,0.12);
+        transform: translateY(-2px);
+    }
+
+    .rol-badge {
+        display: inline-block;
+        padding: 8px 12px;
+        border-radius: 20px;
+        font-size: 12px;
+        font-weight: 600;
+    }
+
+    .rol-administrador { background: #dc3545; color: white; }
+    .rol-supervisor { background: #0dcaf0; color: white; }
+    .rol-tecnico { background: #0d6efd; color: white; }
+    .rol-propietario { background: #198754; color: white; }
+
+    .estado-activo { background: #d1e7dd; color: #0f5132; }
+    .estado-inactivo { background: #f8d7da; color: #842029; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <!-- Header -->
+    <div class="header-section">
+        <div class="row align-items-center">
+            <div class="col-md-8">
+                <h1 class="mb-2"><i class="bi bi-people"></i> Gestión de Usuarios</h1>
+                <p class="mb-0">Total: <strong>{{ usuarios_data|length }} usuarios</strong></p>
+            </div>
+            <div class="col-md-4 text-end">
+            </div>
+        </div>
+    </div>
+
+    <!-- Filtros -->
+    <div class="bg-white p-3 rounded mb-4 shadow-sm">
+        <form method="get" class="row g-3">
+            <div class="col-md-6">
+                <label class="form-label">Buscar usuario</label>
+                <input type="text" name="q" class="form-control" placeholder="Nombre, email o username" value="{{ busqueda }}">
+            </div>
+            <div class="col-md-4">
+                <label class="form-label">Rol</label>
+                <select name="rol" class="form-select">
+                    <option value="">-- Todos --</option>
+                    <option value="administrador" {% if rol_filtro == 'administrador' %}selected{% endif %}>Administrador</option>
+                    <option value="supervisor" {% if rol_filtro == 'supervisor' %}selected{% endif %}>Supervisor</option>
+                    <option value="tecnico" {% if rol_filtro == 'tecnico' %}selected{% endif %}>Técnico</option>
+                    <option value="propietario" {% if rol_filtro == 'propietario' %}selected{% endif %}>Propietario</option>
+                </select>
+            </div>
+            <div class="col-md-2 d-flex align-items-end">
+                <button type="submit" class="btn btn-primary w-100">
+                    <i class="bi bi-search"></i> Filtrar
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Lista de Usuarios -->
+    {% if usuarios_data %}
+        {% for item in usuarios_data %}
+            <div class="usuario-card">
+                <div class="row align-items-center">
+                    <div class="col-md-6">
+                        <h5 class="mb-1">{{ item.user.first_name|default:item.user.username }}</h5>
+                        <p class="mb-1 text-muted">
+                            <i class="bi bi-envelope"></i> {{ item.user.email|default:"Sin email" }}
+                        </p>
+                        <p class="mb-1 text-muted">
+                            <i class="bi bi-person-badge"></i> @{{ item.user.username }}
+                        </p>
+                    </div>
+                    <div class="col-md-3">
+                        <!-- Mostrar rol y datos según tipo -->
+                        {% if item.tipo == 'Propietario' %}
+                            <p class="mb-2">
+                                <span class="badge bg-info">Propietario</span>
+                            </p>
+                            {% if item.propietario.rut %}
+                                <p class="text-muted mb-1"><small><strong>RUT:</strong> {{ item.propietario.rut }}</small></p>
+                            {% endif %}
+                            {% if item.propietario.proyecto %}
+                                <p class="text-muted mb-1"><small><strong>Proyecto:</strong> {{ item.propietario.proyecto.nombre }}</small></p>
+                            {% endif %}
+                        {% elif item.tipo == 'Tecnico' %}
+                            <p class="mb-2">
+                                <span class="badge bg-warning">Técnico</span>
+                            </p>
+                            {% if item.tecnico.rut %}
+                                <p class="text-muted mb-1"><small><strong>RUT:</strong> {{ item.tecnico.rut }}</small></p>
+                            {% endif %}
+                            {% if item.tecnico.especialidad %}
+                                <p class="text-muted mb-1"><small><strong>Especialidad:</strong> {{ item.tecnico.especialidad.nombre }}</small></p>
+                            {% endif %}
+                        {% else %}
+                            {% if item.perfil %}
+                                <p class="mb-2">
+                                    <span class="rol-badge rol-{{ item.perfil.rol }}">
+                                        {{ item.perfil.get_rol_display }}
+                                    </span>
+                                </p>
+                                {% if item.perfil.rut %}
+                                    <p class="text-muted mb-1"><small><strong>RUT:</strong> {{ item.perfil.rut }}</small></p>
+                                {% endif %}
+                            {% else %}
+                                <p class="text-warning"><small><i class="bi bi-exclamation-triangle"></i> Sin perfil</small></p>
+                            {% endif %}
+                        {% endif %}
+                    </div>
+                    <div class="col-md-3 text-end">
+                        {% if item.user.is_active %}
+                            <span class="badge bg-success">Activo</span>
+                        {% else %}
+                            <span class="badge bg-danger">Inactivo</span>
+                        {% endif %}
+                        {% if item.tipo == 'Supervisor' or item.perfil.rol == 'supervisor' %}
+                            <div style="margin-top: 10px;">
+                                <a href="{% url 'admin_eliminar_supervisor' item.user.id %}" class="btn btn-sm btn-outline-danger">
+                                    <i class="bi bi-trash"></i> Eliminar
+                                </a>
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        {% endfor %}
+    {% else %}
+        <div class="alert alert-info">
+            <i class="bi bi-info-circle"></i> No se encontraron usuarios con los filtros especificados.
+        </div>
+    {% endif %}
+
+</div>
+{% endblock %}

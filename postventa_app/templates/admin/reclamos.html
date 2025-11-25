@@ -1,0 +1,144 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Gestión de Reclamos - Admin{% endblock %}
+
+{% block extra_css %}
+<style>
+    .header-section {
+        background: linear-gradient(135deg, var(--color-primary), var(--color-secondary));
+        color: white;
+        padding: 30px;
+        border-radius: 12px;
+        margin-bottom: 30px;
+    }
+
+    .filter-card {
+        background: white;
+        padding: 20px;
+        border-radius: 12px;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+        margin-bottom: 30px;
+    }
+
+    .reclamo-row {
+        background: white;
+        padding: 20px;
+        border-radius: 10px;
+        margin-bottom: 15px;
+        border-left: 4px solid var(--color-primary);
+        transition: all 0.3s;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    }
+
+    .reclamo-row:hover {
+        box-shadow: 0 4px 15px rgba(0,0,0,0.12);
+        transform: translateY(-2px);
+    }
+
+    .estado-badge {
+        display: inline-block;
+        padding: 6px 12px;
+        border-radius: 20px;
+        font-size: 12px;
+        font-weight: 600;
+    }
+
+    .estado-pendiente { background: #fff3cd; color: #856404; }
+    .estado-asignado { background: #cfe2ff; color: #084298; }
+    .estado-en_proceso { background: #d1ecf1; color: #0c5460; }
+    .estado-resuelto { background: #d1e7dd; color: #0f5132; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <!-- Header -->
+    <div class="header-section">
+        <h1 class="mb-2"><i class="bi bi-clipboard-check"></i> Gestión de Reclamos</h1>
+        <p class="mb-0">Total: <strong>{{ reclamos|length }} reclamos</strong></p>
+    </div>
+
+    <!-- Filtros -->
+    <div class="filter-card">
+        <form method="get" class="row g-3">
+            <div class="col-md-4">
+                <label class="form-label">Buscar por folio o propietario</label>
+                <input type="text" name="q" class="form-control" placeholder="Ej: PV-2025-0001 o nombre" value="{{ busqueda }}">
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">Estado</label>
+                <select name="estado" class="form-select">
+                    <option value="">-- Todos --</option>
+                    <option value="pendiente" {% if estado == 'pendiente' %}selected{% endif %}>Pendiente</option>
+                    <option value="asignado" {% if estado == 'asignado' %}selected{% endif %}>Asignado</option>
+                    <option value="en_proceso" {% if estado == 'en_proceso' %}selected{% endif %}>En Proceso</option>
+                    <option value="resuelto" {% if estado == 'resuelto' %}selected{% endif %}>Resuelto</option>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">Proyecto</label>
+                <select name="proyecto" class="form-select">
+                    <option value="">-- Todos --</option>
+                    {% for proyecto in proyectos %}
+                        <option value="{{ proyecto.id_proyecto }}" {% if proyecto_filtro|slugify == proyecto.id_proyecto|stringformat:"s"|slugify %}selected{% endif %}>{{ proyecto.nombre }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-2 d-flex align-items-end">
+                <button type="submit" class="btn btn-primary w-100">
+                    <i class="bi bi-search"></i> Filtrar
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Lista de Reclamos -->
+    {% if reclamos %}
+        {% for reclamo in reclamos %}
+            <div class="reclamo-row">
+                <div class="row align-items-center">
+                    <div class="col-md-6">
+                        <h5 class="mb-1">
+                            <a href="{% url 'admin_detalle_reclamo' reclamo.id_reclamo %}" class="text-decoration-none">
+                                {{ reclamo.numero_folio }}
+                            </a>
+                        </h5>
+                        <p class="mb-1 text-muted">
+                            <i class="bi bi-person"></i> {{ reclamo.propietario.nombre }}
+                        </p>
+                        <p class="mb-1 text-muted">
+                            <i class="bi bi-envelope"></i> {{ reclamo.propietario.email }}
+                        </p>
+                        <p class="mb-1 text-muted">
+                            <i class="bi bi-building"></i> {{ reclamo.proyecto.nombre|default:"Sin proyecto" }}
+                        </p>
+                    </div>
+                    <div class="col-md-3">
+                        <p class="mb-1"><strong>Descripción:</strong></p>
+                        <p class="text-muted" style="font-size: 0.9rem;">{{ reclamo.descripcion|truncatewords:15 }}</p>
+                    </div>
+                    <div class="col-md-3 text-end">
+                        <p class="mb-2">
+                            <span class="estado-badge estado-{{ reclamo.estado }}">
+                                {{ reclamo.get_estado_display }}
+                            </span>
+                        </p>
+                        <p class="mb-2 text-muted" style="font-size: 0.85rem;">
+                            <i class="bi bi-calendar"></i> {{ reclamo.fecha_ingreso|date:"d/m/Y" }}
+                        </p>
+                        <a href="{% url 'admin_detalle_reclamo' reclamo.id_reclamo %}" class="btn btn-sm btn-outline-primary">
+                            <i class="bi bi-eye"></i> Ver Detalle
+                        </a>
+                    </div>
+                </div>
+            </div>
+        {% endfor %}
+    {% else %}
+        <div class="alert alert-info">
+            <i class="bi bi-info-circle"></i> No se encontraron reclamos con los filtros especificados.
+        </div>
+    {% endif %}
+
+</div>
+{% endblock %}

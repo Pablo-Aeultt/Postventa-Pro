@@ -277,3 +277,70 @@ class SupervisorBackend(BaseBackend):
             return User.objects.get(pk=user_id)
         except User.DoesNotExist:
             return None
+
+
+class AdministradorBackend(BaseBackend):
+    """
+    Backend de autenticación para Administradores (is_staff + Perfil.rol='administrador').
+    Permite login con username, RUT o email del usuario.
+    """
+
+    def authenticate(self, request, username=None, password=None, **kwargs):
+        if not username or not password:
+            return None
+
+        u_in = (username or '').strip()
+        
+        try:
+            user = None
+            
+            # 1) Buscar por username exacto
+            try:
+                user = User.objects.get(username__iexact=u_in)
+            except User.DoesNotExist:
+                pass
+            
+            # 2) Si no, buscar por email
+            if not user:
+                try:
+                    user = User.objects.get(email__iexact=u_in)
+                except User.DoesNotExist:
+                    pass
+            
+            # 3) Si no, buscar por RUT en el Perfil
+            if not user:
+                try:
+                    perfil = Perfil.objects.get(rut__iexact=u_in)
+                    user = perfil.user
+                except (Perfil.DoesNotExist, Perfil.MultipleObjectsReturned):
+                    pass
+            
+            if not user:
+                return None
+            
+            # Verificar que es staff/administrador
+            if not user.is_staff:
+                return None
+            
+            # Verificar que tiene perfil de administrador
+            try:
+                perfil = user.perfil
+                if perfil.rol != 'administrador':
+                    return None
+            except Exception:
+                # Si no tiene perfil, rechazar
+                return None
+            
+            # Verificar contraseña
+            if user.check_password(password):
+                return user
+            
+            return None
+        except Exception:
+            return None
+
+    def get_user(self, user_id):
+        try:
+            return User.objects.get(pk=user_id)
+        except User.DoesNotExist:
+            return None

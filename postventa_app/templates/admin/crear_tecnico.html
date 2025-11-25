@@ -1,0 +1,177 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Crear Técnico - Postventa Pro{% endblock %}
+
+{% block extra_css %}
+<style>
+:root {
+    --color-primary: #1A4D4D;
+    --color-secondary: #2A6D6D;
+    --color-accent: #FFD700;
+}
+
+.form-container {
+    background: white;
+    border-radius: 12px;
+    padding: 30px;
+    box-shadow: 0 2px 8px rgba(26, 77, 77, 0.08);
+    margin-bottom: 30px;
+}
+
+.form-header {
+    color: var(--color-primary);
+    font-weight: 700;
+    font-size: 24px;
+    margin-bottom: 25px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.form-group {
+    margin-bottom: 20px;
+}
+
+.form-label {
+    color: var(--color-primary);
+    font-weight: 600;
+    margin-bottom: 8px;
+    display: block;
+}
+
+.form-control {
+    border: 2px solid var(--color-secondary);
+    border-radius: 8px;
+    padding: 10px 14px;
+    font-size: 14px;
+    transition: all 0.3s;
+}
+
+.form-control:focus {
+    border-color: var(--color-accent);
+    box-shadow: 0 0 0 0.2rem rgba(26, 77, 77, 0.1);
+}
+
+.btn-crear {
+    background: linear-gradient(135deg, var(--color-primary), var(--color-secondary));
+    color: white;
+    border: none;
+    padding: 12px 30px;
+    border-radius: 8px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.btn-crear:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(26, 77, 77, 0.2);
+}
+
+.btn-cancelar {
+    background: #e9ecef;
+    color: var(--color-primary);
+    border: none;
+    padding: 12px 30px;
+    border-radius: 8px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s;
+    margin-left: 10px;
+}
+
+.btn-cancelar:hover {
+    background: #dee2e6;
+}
+
+.form-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+}
+
+@media (max-width: 768px) {
+    .form-row {
+        grid-template-columns: 1fr;
+    }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-5" style="background: #f8f9fa; min-height: 100vh;">
+    <div class="container">
+        <div class="form-container">
+            <h3 class="form-header">
+                <i class="fas fa-user-cog"></i> Crear Nuevo Técnico
+            </h3>
+
+            {% if messages %}
+                {% for message in messages %}
+                    <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+                        {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                    </div>
+                {% endfor %}
+            {% endif %}
+
+            <form method="POST">
+                {% csrf_token %}
+
+                <div class="form-group">
+                    <label class="form-label">Nombre Completo <span style="color: red;">*</span></label>
+                    <input type="text" name="nombre" class="form-control" required>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">RUT <span style="color: red;">*</span></label>
+                        <input type="text" name="rut" class="form-control" placeholder="XX.XXX.XXX-X" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Especialidad <span style="color: red;">*</span></label>
+                        <select name="especialidad" class="form-control" required>
+                            <option value="">-- Selecciona una especialidad --</option>
+                            {% for especialidad in especialidades %}
+                                <option value="{{ especialidad.id }}">{{ especialidad.nombre }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">Email</label>
+                        <input type="email" name="email" class="form-control">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Teléfono</label>
+                        <input type="tel" name="telefono" class="form-control">
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Zona de Cobertura</label>
+                    <input type="text" name="zona_cobertura" class="form-control" placeholder="Ej: Zona Norte, Zona Centro">
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Contraseña <span style="color: red;">*</span></label>
+                    <input type="password" name="password" class="form-control" required>
+                </div>
+
+                <div style="margin-top: 30px;">
+                    <button type="submit" class="btn-crear">
+                        <i class="fas fa-check"></i> Crear Técnico
+                    </button>
+                    <a href="{% url 'admin_tecnicos' %}" class="btn-cancelar">Cancelar</a>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

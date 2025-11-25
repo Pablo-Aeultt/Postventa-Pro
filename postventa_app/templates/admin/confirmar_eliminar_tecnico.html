@@ -1,0 +1,136 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Confirmar Eliminación - Postventa Pro{% endblock %}
+
+{% block extra_css %}
+<style>
+:root {
+    --color-primary: #1A4D4D;
+    --color-secondary: #2A6D6D;
+}
+
+.confirmation-container {
+    background: white;
+    border-radius: 12px;
+    padding: 40px;
+    box-shadow: 0 4px 12px rgba(26, 77, 77, 0.15);
+    max-width: 500px;
+    margin: 50px auto;
+}
+
+.warning-icon {
+    color: #dc3545;
+    font-size: 48px;
+    text-align: center;
+    margin-bottom: 20px;
+}
+
+.confirmation-title {
+    color: var(--color-primary);
+    font-weight: 700;
+    font-size: 24px;
+    text-align: center;
+    margin-bottom: 20px;
+}
+
+.confirmation-text {
+    color: #666;
+    text-align: center;
+    margin-bottom: 30px;
+    line-height: 1.6;
+}
+
+.info-item {
+    background: #f8f9fa;
+    padding: 12px 15px;
+    border-left: 4px solid var(--color-primary);
+    margin-bottom: 12px;
+    border-radius: 4px;
+}
+
+.info-item strong {
+    color: var(--color-primary);
+}
+
+.button-group {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+    margin-top: 30px;
+}
+
+.btn-danger-custom {
+    background: #dc3545;
+    color: white;
+    border: none;
+    padding: 12px 30px;
+    border-radius: 8px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s;
+}
+
+.btn-danger-custom:hover {
+    background: #c82333;
+    transform: translateY(-2px);
+}
+
+.btn-cancel-custom {
+    background: #e9ecef;
+    color: var(--color-primary);
+    border: none;
+    padding: 12px 30px;
+    border-radius: 8px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s;
+}
+
+.btn-cancel-custom:hover {
+    background: #dee2e6;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-5" style="background: #f8f9fa; min-height: 100vh;">
+    <div class="confirmation-container">
+        <div class="warning-icon">
+            <i class="bi bi-exclamation-triangle"></i>
+        </div>
+        
+        <h3 class="confirmation-title">Confirmar Eliminación</h3>
+        
+        <p class="confirmation-text">
+            ¿Estás seguro de que deseas eliminar a este técnico? Esta acción no se puede deshacer.
+        </p>
+        
+        <div class="info-item">
+            <strong>Nombre:</strong> {{ tecnico.nombre }}
+        </div>
+        <div class="info-item">
+            <strong>RUT:</strong> {{ tecnico.rut }}
+        </div>
+        <div class="info-item">
+            <strong>Especialidad:</strong> {{ tecnico.especialidad.nombre|default:"Sin especialidad" }}
+        </div>
+        
+        <p class="confirmation-text" style="color: #dc3545; font-size: 14px; margin-top: 20px;">
+            <i class="bi bi-info-circle"></i> Al eliminar este técnico, también se eliminará su usuario del sistema.
+        </p>
+        
+        <form method="POST" style="display: inline;">
+            {% csrf_token %}
+            <div class="button-group">
+                <button type="submit" class="btn-danger-custom">
+                    <i class="bi bi-trash"></i> Eliminar
+                </button>
+                <a href="{% url 'admin_tecnicos' %}" class="btn-cancel-custom">
+                    <i class="bi bi-x"></i> Cancelar
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

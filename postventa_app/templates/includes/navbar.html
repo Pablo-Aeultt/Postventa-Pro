@@ -3,7 +3,7 @@
         <!-- Logo/Brand -->
         <a class="navbar-brand" href="
             {% if user.is_staff %}
-                /admin/
+                {% url 'dashboard_admin' %}
             {% elif request.resolver_match.url_name|slice:':10' == 'supervisor' or request.resolver_match.url_name == 'dashboard_supervisor' or request.resolver_match.url_name == 'dashboard_kpis' %}
                 {% url 'dashboard_supervisor' %}
             {% elif request.resolver_match.url_name|slice:':7' == 'tecnico' or request.resolver_match.url_name == 'dashboard_tecnico' %}
@@ -131,9 +131,10 @@
                     {% endif %}
                     {% if user.is_staff %}
                     <li class="nav-item">
-                        <a class="nav-link" href="/admin/" target="_blank">
-                            <i class="bi bi-gear-fill"></i>
-                            Administración
+                        <a class="nav-link {% if request.resolver_match.url_name|slice:':6' == 'admin_' or request.resolver_match.url_name == 'dashboard_admin' %}active{% endif %}"
+                           href="{% url 'dashboard_admin' %}">
+                            <i class="bi bi-speedometer2"></i>
+                            Admin
                         </a>
                     </li>
                     {% endif %}
@@ -194,13 +195,6 @@
                             <li><hr class="dropdown-divider"></li>
                             
                             {% if user.is_staff %}
-                            <li><hr class="dropdown-divider"></li>
-                            <li>
-                                <a class="dropdown-item" href="/admin/" target="_blank">
-                                    <i class="bi bi-shield-lock"></i>
-                                    Panel Admin
-                                </a>
-                            </li>
                             {% endif %}
                             <li><hr class="dropdown-divider"></li>
                             <li>

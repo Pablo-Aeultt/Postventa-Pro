@@ -92,6 +92,7 @@ DATABASES = {
 
 # Backend de autenticación personalizado
 AUTHENTICATION_BACKENDS = [
+    'postventa_app.backends.AdministradorBackend',  # Login Administrador por username/RUT/email
     'postventa_app.backends.SupervisorBackend',    # Login Supervisor por email/username
     'postventa_app.backends.TecnicoBackend',       # Login Técnico por RUT o Email
     'postventa_app.backends.PropietarioBackend',   # Login Propietario por RUT o Email

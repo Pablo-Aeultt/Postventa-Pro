@@ -2,12 +2,13 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib import messages
 from django.contrib.auth import login, logout, authenticate
 from django.contrib.auth.decorators import login_required
+from django.contrib.auth.models import User
 from django.http import HttpResponse, JsonResponse, FileResponse
 from django.db.models import Q, Prefetch, Avg, Sum, Count
 from django.db.models.functions import TruncDate
 from datetime import datetime, timedelta, date
 import calendar
-from .models import Reclamo, ArchivoEvidencia, Propietario, Tecnico, Proyecto, Cita, AsignacionTecnico, Especialidad, VisitaTecnica, Disponibilidad, EncuestaSatisfaccion, GestionEscombros, AsignacionEscombros, UsoMaterial, EmpresaRetiro
+from .models import Reclamo, ArchivoEvidencia, Propietario, Tecnico, Proyecto, Cita, AsignacionTecnico, Especialidad, VisitaTecnica, Disponibilidad, EncuestaSatisfaccion, GestionEscombros, AsignacionEscombros, UsoMaterial, EmpresaRetiro, Perfil
 from .forms import ReclamoForm, RegistroClienteForm, CitaForm
 from django.contrib.auth.forms import AuthenticationForm
 from django.utils import timezone
@@ -64,7 +65,7 @@ def login_view(request):
     if request.user.is_authenticated:
         # Si ya está autenticado, redirigir al dashboard correcto según su rol
         if request.user.is_staff:
-            return redirect('admin:index')
+            return redirect('dashboard_admin')
         
         supervisor = get_supervisor_from_user(request.user)
         if supervisor:
@@ -85,7 +86,7 @@ def login_view(request):
             
             # Redirigir según tipo de usuario
             if user.is_staff:
-                return redirect('admin:index')
+                return redirect('dashboard_admin')
             
             # Si es supervisor, redirigir a dashboard_supervisor
             supervisor = get_supervisor_from_user(user)
@@ -3057,6 +3058,561 @@ def api_kpis_export_public(request):
         return response
 
 
+# ================================================================
+# VISTAS DEL ADMINISTRADOR
+# ================================================================
+
+def get_admin_from_user(user):
+    """Obtener si el usuario es administrador"""
+    if not user or not getattr(user, 'is_authenticated', False):
+        return False
+    
+    # Administrador es un usuario con is_staff=True
+    return user.is_staff
+
+
+@login_required
+def dashboard_admin(request):
+    """Dashboard principal del administrador - Muestra datos de proyectos de su constructora"""
+    if not request.user.is_staff:
+        messages.error(request, 'No tienes permiso para acceder a esta sección.')
+        return redirect('mis_reclamos')
+    
+    # Obtener perfil del administrador
+    admin_perfil = Perfil.objects.filter(user=request.user, rol='administrador').first()
+    
+    if not admin_perfil or not admin_perfil.proyecto:
+        messages.error(request, 'No tienes un proyecto asignado.')
+        return redirect('mis_reclamos')
+    
+    # Obtener la constructora del administrador
+    constructora = admin_perfil.proyecto.constructora
+    
+    # Obtener todos los proyectos de la constructora
+    proyectos_constructora = Proyecto.objects.filter(constructora=constructora)
+    
+    # Obtener el proyecto seleccionado (por GET o el primero por defecto)
+    proyecto_id = request.GET.get('proyecto_id')
+    if proyecto_id:
+        proyecto = proyectos_constructora.filter(id=proyecto_id).first()
+    
+    # Si no hay proyecto seleccionado o no es válido, usar todos
+    if not proyecto_id or not proyecto:
+        proyecto = None
+    
+    # Calcular estadísticas
+    if proyecto:
+        # Mostrar solo del proyecto seleccionado
+        reclamos_qs = Reclamo.objects.filter(proyecto=proyecto)
+        propietarios_qs = Propietario.objects.filter(proyecto=proyecto)
+        citas_qs = Cita.objects.filter(id_reclamo__proyecto=proyecto)
+    else:
+        # Mostrar de TODOS los proyectos de la constructora
+        reclamos_qs = Reclamo.objects.filter(proyecto__in=proyectos_constructora)
+        propietarios_qs = Propietario.objects.filter(proyecto__in=proyectos_constructora)
+        citas_qs = Cita.objects.filter(id_reclamo__proyecto__in=proyectos_constructora)
+    
+    # Técnicos de la constructora (todos, no filtrados por proyecto)
+    tecnicos_qs = Tecnico.objects.filter(constructora=constructora)
+    
+    total_reclamos = reclamos_qs.count()
+    total_propietarios = propietarios_qs.count()
+    total_tecnicos = tecnicos_qs.count()
+    total_citas = citas_qs.count()
+    
+    # Reclamos por estado
+    reclamos_pendientes = reclamos_qs.filter(estado='pendiente').count()
+    reclamos_en_proceso = reclamos_qs.filter(estado__in=['asignado', 'en_proceso']).count()
+    reclamos_resueltos = reclamos_qs.filter(estado='resuelto').count()
+    
+    # Citas completadas
+    citas_completadas = citas_qs.filter(estado='completada').count()
+    
+    context = {
+        'admin_perfil': admin_perfil,
+        'constructora': constructora,
+        'proyectos_constructora': proyectos_constructora,
+        'proyecto_seleccionado': proyecto,
+        'total_reclamos': total_reclamos,
+        'total_propietarios': total_propietarios,
+        'total_tecnicos': total_tecnicos,
+        'total_citas': total_citas,
+        'reclamos_pendientes': reclamos_pendientes,
+        'reclamos_en_proceso': reclamos_en_proceso,
+        'reclamos_resueltos': reclamos_resueltos,
+        'citas_completadas': citas_completadas,
+    }
+    
+    return render(request, 'admin/dashboard.html', context)
+
+
+@login_required
+def admin_reclamos(request):
+    """Ver todos los reclamos del sistema"""
+    if not request.user.is_staff:
+        messages.error(request, 'No tienes permiso para acceder a esta sección.')
+        return redirect('mis_reclamos')
+    
+    # Obtener perfil y constructora del admin
+    admin_perfil = Perfil.objects.filter(user=request.user, rol='administrador').first()
+    if not admin_perfil or not admin_perfil.proyecto:
+        messages.error(request, 'No tienes un proyecto asignado.')
+        return redirect('mis_reclamos')
+    
+    constructora = admin_perfil.proyecto.constructora
+    proyectos_constructora = Proyecto.objects.filter(constructora=constructora)
+    
+    # Filtros
+    estado = request.GET.get('estado', '')
+    busqueda = request.GET.get('q', '')
+    proyecto_id = request.GET.get('proyecto', '')
+    
+    # Solo mostrar reclamos de proyectos de su constructora
+    reclamos = Reclamo.objects.filter(proyecto__in=proyectos_constructora).select_related('propietario', 'proyecto')
+    
+    if estado:
+        reclamos = reclamos.filter(estado=estado)
+    
+    if busqueda:
+        reclamos = reclamos.filter(
+            Q(numero_folio__icontains=busqueda) |
+            Q(propietario__nombre__icontains=busqueda) |
+            Q(propietario__email__icontains=busqueda)
+        )
+    
+    if proyecto_id:
+        # Validar que el proyecto pertenece a su constructora
+        proyecto = proyectos_constructora.filter(id=proyecto_id).first()
+        if proyecto:
+            reclamos = reclamos.filter(proyecto_id=proyecto_id)
+    
+    reclamos = reclamos.order_by('-fecha_ingreso')
+    
+    context = {
+        'reclamos': reclamos,
+        'estado_filtro': estado,
+        'busqueda': busqueda,
+        'proyecto_filtro': proyecto_id,
+        'proyectos': proyectos_constructora,
+        'constructora': constructora,
+    }
+    
+    return render(request, 'admin/reclamos.html', context)
+
+
+@login_required
+def admin_detalle_reclamo(request, reclamo_id):
+    """Ver detalle de un reclamo"""
+    if not request.user.is_staff:
+        messages.error(request, 'No tienes permiso para acceder a esta sección.')
+        return redirect('mis_reclamos')
+    
+    reclamo = get_object_or_404(Reclamo, id_reclamo=reclamo_id)
+    citas = Cita.objects.filter(id_reclamo=reclamo).order_by('-fecha_programada')
+    archivos = ArchivoEvidencia.objects.filter(id_reclamo=reclamo)
+    
+    context = {
+        'reclamo': reclamo,
+        'citas': citas,
+        'archivos': archivos,
+    }
+    
+    return render(request, 'admin/detalle_reclamo.html', context)
+
+
+@login_required
+def admin_usuarios(request):
+    """Gestionar usuarios del sistema"""
+    if not request.user.is_staff:
+        messages.error(request, 'No tienes permiso para acceder a esta sección.')
+        return redirect('mis_reclamos')
+    
+    from django.contrib.auth.models import User
+    from .models import Perfil
+    
+    # Obtener perfil y constructora del admin
+    admin_perfil = Perfil.objects.filter(user=request.user, rol='administrador').first()
+    if not admin_perfil or not admin_perfil.proyecto:
+        messages.error(request, 'No tienes un proyecto asignado.')
+        return redirect('mis_reclamos')
+    
+    constructora = admin_perfil.proyecto.constructora
+    proyectos_constructora = Proyecto.objects.filter(constructora=constructora)
+    
+    # Filtros
+    rol = request.GET.get('rol', '')
+    busqueda = request.GET.get('q', '')
+    
+    usuarios_data = []
+    
+    # 1. Usuarios con Perfil (Propietarios, Supervisores)
+    usuarios_perfil = User.objects.filter(
+        perfil__proyecto__in=proyectos_constructora
+    ).distinct()
+    
+    if busqueda:
+        usuarios_perfil = usuarios_perfil.filter(
+            Q(username__icontains=busqueda) |
+            Q(email__icontains=busqueda) |
+            Q(first_name__icontains=busqueda)
+        )
+    
+    for user in usuarios_perfil:
+        perfil = Perfil.objects.filter(user=user).first()
+        
+        if rol and perfil and perfil.rol != rol:
+            continue
+        
+        usuarios_data.append({
+            'user': user,
+            'perfil': perfil,
+            'tipo': 'Perfil',
+            'rol_display': perfil.rol if perfil else 'N/A'
+        })
+    
+    # 2. Técnicos de la constructora
+    if not rol or rol == 'tecnico':
+        tecnicos = Tecnico.objects.filter(constructora=constructora)
+        
+        if busqueda:
+            tecnicos = tecnicos.filter(
+                Q(nombre__icontains=busqueda) |
+                Q(rut__icontains=busqueda) |
+                Q(user__email__icontains=busqueda)
+            )
+        
+        for tecnico in tecnicos:
+            usuarios_data.append({
+                'user': tecnico.user,
+                'tecnico': tecnico,
+                'tipo': 'Tecnico',
+                'rol_display': 'Técnico'
+            })
+    
+    # 3. Propietarios de los proyectos
+    if not rol or rol == 'propietario':
+        propietarios = Propietario.objects.filter(proyecto__in=proyectos_constructora).distinct()
+        
+        if busqueda:
+            propietarios = propietarios.filter(
+                Q(nombre__icontains=busqueda) |
+                Q(rut__icontains=busqueda) |
+                Q(email__icontains=busqueda)
+            )
+        
+        for propietario in propietarios:
+            # Crear un objeto "virtual" para mantener consistencia en el template
+            class VirtualUser:
+                def __init__(self, nombre, email):
+                    self.first_name = nombre
+                    self.username = nombre.replace(' ', '_').lower()
+                    self.email = email or ''
+                    self.is_active = True
+            
+            virtual_user = VirtualUser(propietario.nombre, propietario.email)
+            
+            usuarios_data.append({
+                'user': virtual_user,
+                'propietario': propietario,
+                'tipo': 'Propietario',
+                'rol_display': 'Propietario'
+            })
+    
+    context = {
+        'usuarios_data': usuarios_data,
+        'rol_filtro': rol,
+        'busqueda': busqueda,
+        'constructora': constructora,
+    }
+    
+    return render(request, 'admin/usuarios.html', context)
+
+
+@login_required
+def admin_tecnicos(request):
+    """Gestionar técnicos del sistema"""
+    if not request.user.is_staff:
+        messages.error(request, 'No tienes permiso para acceder a esta sección.')
+        return redirect('mis_reclamos')
+    
+    # Obtener perfil y constructora del admin
+    admin_perfil = Perfil.objects.filter(user=request.user, rol='administrador').first()
+    if not admin_perfil or not admin_perfil.proyecto:
+        messages.error(request, 'No tienes un proyecto asignado.')
+        return redirect('mis_reclamos')
+    
+    constructora = admin_perfil.proyecto.constructora
+    
+    # Solo mostrar técnicos de su constructora
+    tecnicos = Tecnico.objects.filter(constructora=constructora).select_related('especialidad', 'constructora')
+    
+    context = {
+        'tecnicos': tecnicos,
+        'constructora': constructora,
+    }
+    
+    return render(request, 'admin/tecnicos.html', context)
+
+
+@login_required
+@login_required
+def admin_reportes(request):
+    """Dashboard de KPIs - Visualización completa de los 15 KPIs para administrador"""
+    if not request.user.is_staff:
+        messages.error(request, 'No tienes permiso para acceder a esta sección.')
+        return redirect('mis_reclamos')
+    
+    # Obtener perfil y constructora del admin
+    admin_perfil = Perfil.objects.filter(user=request.user, rol='administrador').first()
+    if not admin_perfil or not admin_perfil.proyecto:
+        messages.error(request, 'No tienes un proyecto asignado.')
+        return redirect('mis_reclamos')
+    
+    constructora = admin_perfil.proyecto.constructora
+    proyectos_constructora = Proyecto.objects.filter(constructora=constructora)
+    
+    # Verificar si hay un proyecto específico seleccionado
+    proyecto_id = request.GET.get('proyecto_id')
+    proyecto_seleccionado = None
+    
+    if proyecto_id:
+        proyecto_seleccionado = proyectos_constructora.filter(id=proyecto_id).first()
+    
+    # Obtener filtros de fecha (opcional)
+    fecha_inicio_str = request.GET.get('fecha_inicio')
+    fecha_fin_str = request.GET.get('fecha_fin')
+    
+    fecha_inicio = None
+    fecha_fin = None
+    
+    if fecha_inicio_str:
+        try:
+            fecha_inicio = datetime.strptime(fecha_inicio_str, '%Y-%m-%d').date()
+        except:
+            pass
+    
+    if fecha_fin_str:
+        try:
+            fecha_fin = datetime.strptime(fecha_fin_str, '%Y-%m-%d').date()
+        except:
+            pass
+    
+    # Determinar qué proyecto usar
+    if proyecto_seleccionado:
+        proyecto_para_kpi = proyecto_seleccionado
+    else:
+        # Si no hay proyecto seleccionado, usar el primero de la constructora
+        proyecto_para_kpi = proyectos_constructora.first()
+    
+    # Obtener todos los KPIs del proyecto seleccionado
+    kpis_data = KPICalculator.obtener_todos_los_kpis(proyecto_para_kpi, fecha_inicio, fecha_fin)
+    
+    # Mapeo de nombres descriptivos y categorías (igual al supervisor)
+    kpi_info = {
+        "KPI_01": {
+            "nombre": "Tasa Reclamos Atendidos en Plazo",
+            "categoria": "Cumplimiento",
+            "descripcion": "Porcentaje de reclamos atendidos dentro del plazo comprometido"
+        },
+        "KPI_02": {
+            "nombre": "Ratio Demanda vs Capacidad",
+            "categoria": "Capacidad",
+            "descripcion": "Relación entre demanda y capacidad de técnicos (overbooking)"
+        },
+        "KPI_03": {
+            "nombre": "Tiempo Promedio Resolución",
+            "categoria": "Eficiencia",
+            "descripcion": "TTR: Tiempo promedio para resolver un reclamo"
+        },
+        "KPI_04": {
+            "nombre": "Cumplimiento de Citas",
+            "categoria": "Cumplimiento",
+            "descripcion": "Porcentaje de citas programadas que se cumplen"
+        },
+        "KPI_05": {
+            "nombre": "Casos Cerrados en Primera Visita",
+            "categoria": "Eficiencia",
+            "descripcion": "Porcentaje de reclamos resueltos en la primera visita"
+        },
+        "KPI_06": {
+            "nombre": "Tasa Reaperturas",
+            "categoria": "Calidad",
+            "descripcion": "Porcentaje de reclamos que se reabren después de cerrados"
+        },
+        "KPI_07": {
+            "nombre": "Costo Promedio por Reclamo",
+            "categoria": "Costo",
+            "descripcion": "Costo total invertido por reclamo"
+        },
+        "KPI_08": {
+            "nombre": "Costo Materiales por Caso",
+            "categoria": "Costo",
+            "descripcion": "Costo de materiales utilizados por caso"
+        },
+        "KPI_09": {
+            "nombre": "Índice Frecuencia Tipos Falla",
+            "categoria": "Análisis",
+            "descripcion": "Distribución de tipos de falla más comunes"
+        },
+        "KPI_10": {
+            "nombre": "Puntualidad del Técnico",
+            "categoria": "Cumplimiento",
+            "descripcion": "Porcentaje de citas donde el técnico llega a tiempo"
+        },
+        "KPI_11": {
+            "nombre": "Productividad Técnico",
+            "categoria": "Productividad",
+            "descripcion": "Promedio de reclamos resueltos por técnico"
+        },
+        "KPI_12": {
+            "nombre": "Estado de Reclamos",
+            "categoria": "Análisis",
+            "descripcion": "Reclamos pendientes y resueltos"
+        },
+        "KPI_13": {
+            "nombre": "Tiempo Cierre Documental",
+            "categoria": "Eficiencia",
+            "descripcion": "Tiempo para completar la documentación del reclamo"
+        },
+        "KPI_14": {
+            "nombre": "Satisfacción del Cliente",
+            "categoria": "Satisfacción",
+            "descripcion": "Porcentaje de clientes satisfechos por proyecto"
+        },
+        "KPI_15": {
+            "nombre": "Costo Reprocesos",
+            "categoria": "Costo",
+            "descripcion": "Porcentaje de costo invertido en reprocesos"
+        }
+    }
+    
+    # Construir lista de KPIs con información completa
+    kpis_formateados = []
+    
+    for kpi_id in ["KPI_01", "KPI_02", "KPI_03", "KPI_04", "KPI_05", 
+                   "KPI_06", "KPI_07", "KPI_08", "KPI_09", "KPI_10",
+                   "KPI_11", "KPI_12", "KPI_13", "KPI_14", "KPI_15"]:
+        
+        kpi_data = kpis_data.get(kpi_id, {})
+        info = kpi_info.get(kpi_id, {})
+        
+        valor = kpi_data.get('valor', None)
+        unidad = kpi_data.get('unidad', '')
+        
+        # Casos especiales de KPIs con estructura compleja
+        datos_adicionales = {k: v for k, v in kpi_data.items() if k not in ['valor', 'unidad']}
+        
+        # Para KPI_09, si tiene categorias pero no valor, usar el porcentaje más alto
+        if kpi_id == 'KPI_09' and 'categorias' in kpi_data and valor is None:
+            categorias = kpi_data.get('categorias', [])
+            if categorias:
+                valor = max([c.get('porcentaje', 0) for c in categorias]) if categorias else None
+        
+        # Para KPI_11, si tiene tecnicos pero no valor, calcular promedio
+        if kpi_id == 'KPI_11' and 'tecnicos' in kpi_data and valor is None:
+            tecnicos = kpi_data.get('tecnicos', [])
+            if tecnicos:
+                total_reclamos = sum([t.get('reclamos', 0) for t in tecnicos])
+                promedio = total_reclamos / len(tecnicos) if tecnicos else 0
+                valor = round(promedio, 2)
+                unidad = 'reclamos/técnico'
+        
+        # Para KPI_12, si tiene reclamos pero no valor, usar el conteo
+        if kpi_id == 'KPI_12' and valor is None and 'valor' not in kpi_data:
+            if 'pendientes' in kpi_data:
+                valor = kpi_data.get('pendientes', 0)
+                unidad = 'reclamos'
+        
+        # Para KPI_14, si tiene satisfaccion pero no valor, calcular promedio
+        if kpi_id == 'KPI_14' and valor is None and 'satisfaccion_promedio' in kpi_data:
+            valor = kpi_data.get('satisfaccion_promedio')
+            unidad = '/5.0'
+        
+        kpis_formateados.append({
+            'id': kpi_id,
+            'nombre': info.get('nombre', kpi_id),
+            'categoria': info.get('categoria', 'Otros'),
+            'descripcion': info.get('descripcion', ''),
+            'valor': valor,
+            'unidad': unidad,
+            'datos_adicionales': datos_adicionales
+        })
+    
+    # Agrupar por categoría
+    kpis_por_categoria = {}
+    for kpi in kpis_formateados:
+        cat = kpi['categoria']
+        if cat not in kpis_por_categoria:
+            kpis_por_categoria[cat] = []
+        kpis_por_categoria[cat].append(kpi)
+    
+    # Formatear fechas a DD/MM/YYYY para mostrar en el template
+    fecha_inicio_display = fecha_inicio.strftime('%d/%m/%Y') if fecha_inicio else None
+    fecha_fin_display = fecha_fin.strftime('%d/%m/%Y') if fecha_fin else None
+    
+    context = {
+        'constructora': constructora,
+        'kpis': kpis_formateados,
+        'kpis_por_categoria': kpis_por_categoria,
+        'fecha_inicio': fecha_inicio_display,
+        'fecha_fin': fecha_fin_display,
+        'fecha_inicio_input': fecha_inicio_str,
+        'fecha_fin_input': fecha_fin_str,
+        'categorias': list(kpis_por_categoria.keys()),
+        'proyectos_constructora': proyectos_constructora,
+        'proyecto_seleccionado': proyecto_seleccionado,
+    }
+    
+    return render(request, 'admin/reportes.html', context)
+
+
+
+@login_required
+def admin_costos(request):
+    """Ver costos, materiales y stock de bodega"""
+    if not request.user.is_staff:
+        messages.error(request, 'No tienes permiso para acceder a esta sección.')
+        return redirect('mis_reclamos')
+    
+    # Obtener perfil y constructora del admin
+    admin_perfil = Perfil.objects.filter(user=request.user, rol='administrador').first()
+    if not admin_perfil or not admin_perfil.proyecto:
+        messages.error(request, 'No tienes un proyecto asignado.')
+        return redirect('mis_reclamos')
+    
+    constructora = admin_perfil.proyecto.constructora
+    proyectos_constructora = Proyecto.objects.filter(constructora=constructora)
+    
+    # Obtener todos los usos de materiales de sus proyectos
+    from .models import UsoMaterial, Material
+    
+    usos = UsoMaterial.objects.filter(
+        id_visita__id_reclamo__proyecto__in=proyectos_constructora
+    ).select_related('id_visita', 'id_material').order_by('-fecha_uso')
+    
+    # Obtener stock de bodega
+    materiales = Material.objects.all().order_by('nombre')
+    
+    # Calcular costo total del stock
+    costo_total_stock = sum([
+        (m.stock_actual or 0) * m.costo_unitario for m in materiales
+    ])
+    
+    # Calcular costo de materiales usados
+    costo_total_usado = sum([
+        (uso.id_material.costo_unitario * uso.cantidad_usada) for uso in usos if uso.id_material and uso.cantidad_usada
+    ])
+    
+    context = {
+        'usos': usos,
+        'materiales': materiales,
+        'constructora': constructora,
+        'costo_total_stock': costo_total_stock,
+        'costo_total_usado': costo_total_usado,
+    }
+    
+    return render(request, 'admin/costos.html', context)
+
 
 
 @login_required
@@ -3108,4 +3664,301 @@ def export_kpis_csv(request):
     
     return response
 
+
+@login_required
+def admin_crear_supervisor(request):
+    """Crear un nuevo supervisor"""
+    if not request.user.is_staff:
+        messages.error(request, 'No tienes permiso para acceder a esta sección.')
+        return redirect('mis_reclamos')
+    
+    # Obtener perfil y constructora del admin
+    admin_perfil = Perfil.objects.filter(user=request.user, rol='administrador').first()
+    if not admin_perfil or not admin_perfil.proyecto:
+        messages.error(request, 'No tienes un proyecto asignado.')
+        return redirect('mis_reclamos')
+    
+    constructora = admin_perfil.proyecto.constructora
+    proyectos_constructora = Proyecto.objects.filter(constructora=constructora)
+    
+    if request.method == 'POST':
+        username = request.POST.get('username')
+        email = request.POST.get('email')
+        nombre = request.POST.get('nombre')
+        apellido = request.POST.get('apellido')
+        rut = request.POST.get('rut')
+        telefono = request.POST.get('telefono')
+        proyecto_id = request.POST.get('proyecto')
+        password = request.POST.get('password')
+        
+        # Validaciones
+        if not all([username, email, nombre, proyecto_id, password]):
+            messages.error(request, 'Completa todos los campos requeridos.')
+            return redirect('admin_crear_supervisor')
+        
+        # Validar que el proyecto pertenece a su constructora
+        proyecto = proyectos_constructora.filter(id=proyecto_id).first()
+        if not proyecto:
+            messages.error(request, 'Proyecto no válido.')
+            return redirect('admin_crear_supervisor')
+        
+        # Validar usuario único
+        if User.objects.filter(username=username).exists():
+            messages.error(request, 'El usuario ya existe.')
+            return redirect('admin_crear_supervisor')
+        
+        # Crear usuario
+        user = User.objects.create_user(
+            username=username,
+            email=email,
+            password=password,
+            first_name=nombre,
+            last_name=apellido or ''
+        )
+        
+        # Crear perfil
+        Perfil.objects.create(
+            user=user,
+            rol='supervisor',
+            rut=rut or '',
+            telefono=telefono or '',
+            proyecto=proyecto,
+            direccion=''
+        )
+        
+        messages.success(request, f'Supervisor {nombre} creado exitosamente.')
+        return redirect('admin_usuarios')
+    
+    context = {
+        'proyectos': proyectos_constructora,
+        'constructora': constructora,
+    }
+    
+    return render(request, 'admin/crear_supervisor.html', context)
+
+
+@login_required
+def admin_eliminar_supervisor(request, supervisor_id):
+    """Eliminar un supervisor"""
+    if not request.user.is_staff:
+        messages.error(request, 'No tienes permiso para acceder a esta sección.')
+        return redirect('mis_reclamos')
+    
+    # Obtener perfil y constructora del admin
+    admin_perfil = Perfil.objects.filter(user=request.user, rol='administrador').first()
+    if not admin_perfil or not admin_perfil.proyecto:
+        messages.error(request, 'No tienes un proyecto asignado.')
+        return redirect('mis_reclamos')
+    
+    constructora = admin_perfil.proyecto.constructora
+    
+    # Obtener el supervisor por su usuario
+    try:
+        supervisor_user = User.objects.get(id=supervisor_id)
+        perfil_supervisor = Perfil.objects.get(user=supervisor_user, rol='supervisor', proyecto__constructora=constructora)
+    except (User.DoesNotExist, Perfil.DoesNotExist):
+        messages.error(request, 'Supervisor no encontrado.')
+        return redirect('admin_usuarios')
+    
+    if request.method == 'POST':
+        nombre_supervisor = supervisor_user.first_name or supervisor_user.username
+        
+        # Eliminar perfil
+        perfil_supervisor.delete()
+        
+        # Eliminar usuario
+        supervisor_user.delete()
+        
+        messages.success(request, f'Supervisor {nombre_supervisor} eliminado exitosamente.')
+        return redirect('admin_usuarios')
+    
+    context = {
+        'supervisor': supervisor_user,
+        'perfil': perfil_supervisor,
+    }
+    
+    return render(request, 'admin/confirmar_eliminar_supervisor.html', context)
+
+
+@login_required
+def admin_crear_tecnico(request):
+    """Crear un nuevo técnico"""
+    if not request.user.is_staff:
+        messages.error(request, 'No tienes permiso para acceder a esta sección.')
+        return redirect('mis_reclamos')
+    
+    # Obtener perfil y constructora del admin
+    admin_perfil = Perfil.objects.filter(user=request.user, rol='administrador').first()
+    if not admin_perfil or not admin_perfil.proyecto:
+        messages.error(request, 'No tienes un proyecto asignado.')
+        return redirect('mis_reclamos')
+    
+    constructora = admin_perfil.proyecto.constructora
+    
+    if request.method == 'POST':
+        nombre = request.POST.get('nombre')
+        rut = request.POST.get('rut')
+        especialidad_id = request.POST.get('especialidad')
+        telefono = request.POST.get('telefono')
+        email = request.POST.get('email')
+        zona_cobertura = request.POST.get('zona_cobertura')
+        password = request.POST.get('password')
+        
+        # Validaciones
+        if not all([nombre, rut, especialidad_id, password]):
+            messages.error(request, 'Completa todos los campos requeridos.')
+            return redirect('admin_crear_tecnico')
+        
+        # Validar especialidad existe
+        especialidad = Especialidad.objects.filter(id=especialidad_id).first()
+        if not especialidad:
+            messages.error(request, 'Especialidad no válida.')
+            return redirect('admin_crear_tecnico')
+        
+        # Validar usuario único
+        username = f"tecnico_{rut.replace('.', '').replace('-', '')}"
+        if User.objects.filter(username=username).exists():
+            username = f"{username}_{Tecnico.objects.count()}"
+        
+        # Crear usuario
+        user = User.objects.create_user(
+            username=username,
+            email=email or f"{username}@constructora.local",
+            password=password,
+            first_name=nombre
+        )
+        
+        # Crear técnico
+        Tecnico.objects.create(
+            rut=rut,
+            nombre=nombre,
+            especialidad=especialidad,
+            constructora=constructora,
+            user=user,
+            telefono=telefono or '',
+            email=email or '',
+            zona_cobertura=zona_cobertura or '',
+            estado='activo'
+        )
+        
+        messages.success(request, f'Técnico {nombre} creado exitosamente.')
+        return redirect('admin_tecnicos')
+    
+    especialidades = Especialidad.objects.all()
+    
+    context = {
+        'especialidades': especialidades,
+        'constructora': constructora,
+    }
+    
+    return render(request, 'admin/crear_tecnico.html', context)
+
+
+@login_required
+def admin_editar_tecnico(request, tecnico_id):
+    """Editar un técnico existente"""
+    if not request.user.is_staff:
+        messages.error(request, 'No tienes permiso para acceder a esta sección.')
+        return redirect('mis_reclamos')
+    
+    # Obtener perfil y constructora del admin
+    admin_perfil = Perfil.objects.filter(user=request.user, rol='administrador').first()
+    if not admin_perfil or not admin_perfil.proyecto:
+        messages.error(request, 'No tienes un proyecto asignado.')
+        return redirect('mis_reclamos')
+    
+    constructora = admin_perfil.proyecto.constructora
+    
+    # Obtener el técnico
+    tecnico = get_object_or_404(Tecnico, id_tecnico=tecnico_id, constructora=constructora)
+    
+    if request.method == 'POST':
+        nombre = request.POST.get('nombre')
+        especialidad_id = request.POST.get('especialidad')
+        telefono = request.POST.get('telefono')
+        email = request.POST.get('email')
+        zona_cobertura = request.POST.get('zona_cobertura')
+        estado = request.POST.get('estado')
+        
+        # Validaciones
+        if not all([nombre, especialidad_id]):
+            messages.error(request, 'Completa los campos requeridos.')
+            return redirect('admin_editar_tecnico', tecnico_id=tecnico_id)
+        
+        # Validar especialidad existe
+        especialidad = Especialidad.objects.filter(id=especialidad_id).first()
+        if not especialidad:
+            messages.error(request, 'Especialidad no válida.')
+            return redirect('admin_editar_tecnico', tecnico_id=tecnico_id)
+        
+        # Actualizar técnico
+        tecnico.nombre = nombre
+        tecnico.especialidad = especialidad
+        tecnico.telefono = telefono or ''
+        tecnico.email = email or ''
+        tecnico.zona_cobertura = zona_cobertura or ''
+        tecnico.estado = estado or 'activo'
+        tecnico.save()
+        
+        # Actualizar usuario
+        if tecnico.user:
+            tecnico.user.first_name = nombre
+            tecnico.user.email = email or tecnico.user.email
+            tecnico.user.save()
+        
+        messages.success(request, f'Técnico {nombre} actualizado exitosamente.')
+        return redirect('admin_tecnicos')
+    
+    especialidades = Especialidad.objects.all()
+    
+    context = {
+        'tecnico': tecnico,
+        'especialidades': especialidades,
+        'constructora': constructora,
+    }
+    
+    return render(request, 'admin/editar_tecnico.html', context)
+
+
+@login_required
+def admin_eliminar_tecnico(request, tecnico_id):
+    """Eliminar un técnico"""
+    if not request.user.is_staff:
+        messages.error(request, 'No tienes permiso para acceder a esta sección.')
+        return redirect('mis_reclamos')
+    
+    # Obtener perfil y constructora del admin
+    admin_perfil = Perfil.objects.filter(user=request.user, rol='administrador').first()
+    if not admin_perfil or not admin_perfil.proyecto:
+        messages.error(request, 'No tienes un proyecto asignado.')
+        return redirect('mis_reclamos')
+    
+    constructora = admin_perfil.proyecto.constructora
+    
+    # Obtener el técnico
+    tecnico = get_object_or_404(Tecnico, id_tecnico=tecnico_id, constructora=constructora)
+    
+    if request.method == 'POST':
+        nombre_tecnico = tecnico.nombre
+        user_id = tecnico.user.id if tecnico.user else None
+        
+        # Eliminar técnico
+        tecnico.delete()
+        
+        # Eliminar usuario del sistema si existe
+        if user_id:
+            try:
+                user = User.objects.get(id=user_id)
+                user.delete()
+            except User.DoesNotExist:
+                pass
+        
+        messages.success(request, f'Técnico {nombre_tecnico} eliminado exitosamente.')
+        return redirect('admin_tecnicos')
+    
+    context = {
+        'tecnico': tecnico,
+    }
+    
+    return render(request, 'admin/confirmar_eliminar_tecnico.html', context)
 
