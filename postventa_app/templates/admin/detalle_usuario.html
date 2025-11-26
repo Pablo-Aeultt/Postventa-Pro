@@ -1,0 +1,366 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Detalle de Usuario - Postventa Pro{% endblock %}
+
+{% block extra_css %}
+<style>
+:root {
+    --color-primary: #1A4D4D;
+    --color-secondary: #2A6D6D;
+    --color-accent: #FFD700;
+}
+
+.header-section {
+    background: linear-gradient(135deg, var(--color-primary), var(--color-secondary));
+    color: white;
+    padding: 30px;
+    border-radius: 12px;
+    margin-bottom: 30px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.header-title {
+    font-size: 28px;
+    font-weight: 700;
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.detail-container {
+    background: white;
+    border-radius: 12px;
+    padding: 30px;
+    box-shadow: 0 2px 8px rgba(26, 77, 77, 0.08);
+    margin-bottom: 30px;
+}
+
+.detail-section {
+    margin-bottom: 30px;
+}
+
+.detail-section:last-child {
+    margin-bottom: 0;
+}
+
+.section-title {
+    color: var(--color-primary);
+    font-weight: 700;
+    font-size: 18px;
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding-bottom: 12px;
+    border-bottom: 2px solid var(--color-secondary);
+}
+
+.detail-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    margin-bottom: 20px;
+}
+
+.detail-row.full {
+    grid-template-columns: 1fr;
+}
+
+.detail-item {
+    display: flex;
+    flex-direction: column;
+}
+
+.detail-label {
+    font-weight: 600;
+    color: var(--color-primary);
+    margin-bottom: 6px;
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.detail-value {
+    color: #333;
+    font-size: 16px;
+    padding: 10px 12px;
+    background: #f8f9fa;
+    border-left: 3px solid var(--color-secondary);
+    border-radius: 4px;
+    min-height: 38px;
+    display: flex;
+    align-items: center;
+}
+
+.badge {
+    display: inline-block;
+    padding: 6px 12px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
+    width: fit-content;
+}
+
+.badge-primary {
+    background: #d1ecf1;
+    color: #0c5460;
+}
+
+.badge-success {
+    background: #d4edda;
+    color: #155724;
+}
+
+.badge-danger {
+    background: #f8d7da;
+    color: #721c24;
+}
+
+.badge-warning {
+    background: #fff3cd;
+    color: #856404;
+}
+
+.badge-info {
+    background: #d1e7f1;
+    color: #003d7a;
+}
+
+.button-group {
+    display: flex;
+    gap: 10px;
+    margin-top: 30px;
+    padding-top: 20px;
+    border-top: 2px solid #e9ecef;
+}
+
+.btn-volver {
+    background: linear-gradient(135deg, var(--color-primary), var(--color-secondary));
+    color: white;
+    border: none;
+    padding: 12px 24px;
+    border-radius: 8px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    text-decoration: none;
+}
+
+.btn-volver:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(26, 77, 77, 0.2);
+    color: white;
+}
+
+.no-data {
+    color: #999;
+    font-style: italic;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <!-- Header -->
+    <div class="header-section">
+        <h1 class="header-title">
+            <i class="fas fa-user-circle"></i> Detalle de Usuario
+        </h1>
+        <a href="{% url 'admin_usuarios' %}" class="btn-volver">
+            <i class="fas fa-arrow-left"></i> Volver
+        </a>
+    </div>
+
+    {% if messages %}
+    <div class="alert alert-danger alert-dismissible fade show" role="alert">
+        {% for message in messages %}
+            {{ message }}
+        {% endfor %}
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+    {% endif %}
+
+    <!-- Información Principal -->
+    <div class="detail-container">
+        <div class="section-title">
+            <i class="fas fa-id-card"></i> Información General
+        </div>
+        <div class="detail-row">
+            <div class="detail-item">
+                <span class="detail-label">Nombre de Usuario</span>
+                <div class="detail-value">{{ datos_usuario.usuario.username }}</div>
+            </div>
+            <div class="detail-item">
+                <span class="detail-label">Email</span>
+                <div class="detail-value">{{ datos_usuario.usuario.email|default:"No registrado" }}</div>
+            </div>
+        </div>
+        <div class="detail-row">
+            <div class="detail-item">
+                <span class="detail-label">Nombre Completo</span>
+                <div class="detail-value">
+                    {% if datos_usuario.tipo == 'tecnico' and datos_usuario.tecnico.nombre %}
+                        {{ datos_usuario.tecnico.nombre }}
+                    {% elif datos_usuario.tipo == 'propietario' and datos_usuario.propietario.nombre %}
+                        {{ datos_usuario.propietario.nombre }}
+                    {% elif datos_usuario.usuario.first_name or datos_usuario.usuario.last_name %}
+                        {{ datos_usuario.usuario.first_name }} {{ datos_usuario.usuario.last_name }}
+                    {% else %}
+                        <span class="no-data">No registrado</span>
+                    {% endif %}
+                </div>
+            </div>
+            <div class="detail-item">
+                <span class="detail-label">Rol</span>
+                <div class="detail-value">
+                    {% if datos_usuario.tipo == 'administrador' %}
+                        <span class="badge badge-danger">Administrador</span>
+                    {% elif datos_usuario.tipo == 'supervisor' %}
+                        <span class="badge badge-warning">Supervisor</span>
+                    {% elif datos_usuario.tipo == 'tecnico' %}
+                        <span class="badge badge-info">Técnico</span>
+                    {% elif datos_usuario.tipo == 'propietario' %}
+                        <span class="badge badge-primary">Propietario</span>
+                    {% else %}
+                        <span class="badge">Desconocido</span>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        <div class="detail-row">
+            <div class="detail-item">
+                <span class="detail-label">Estado</span>
+                <div class="detail-value">
+                    {% if datos_usuario.usuario.is_active %}
+                        <span class="badge badge-success">Activo</span>
+                    {% else %}
+                        <span class="badge badge-danger">Inactivo</span>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Información del Perfil (si existe) -->
+    {% if datos_usuario.perfil %}
+    <div class="detail-container">
+        <div class="section-title">
+            <i class="fas fa-briefcase"></i> Información del Perfil
+        </div>
+        <div class="detail-row">
+            <div class="detail-item">
+                <span class="detail-label">RUT</span>
+                <div class="detail-value">{{ datos_usuario.perfil.rut|default:"No registrado" }}</div>
+            </div>
+            <div class="detail-item">
+                <span class="detail-label">Teléfono</span>
+                <div class="detail-value">{{ datos_usuario.perfil.telefono|default:"No registrado" }}</div>
+            </div>
+        </div>
+        {% if datos_usuario.proyecto %}
+        <div class="detail-row">
+            <div class="detail-item">
+                <span class="detail-label">Proyecto Asignado</span>
+                <div class="detail-value">{{ datos_usuario.proyecto.nombre }}</div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    <!-- Información de Propietario (si existe) -->
+    {% if datos_usuario.propietario %}
+    <div class="detail-container">
+        <div class="section-title">
+            <i class="fas fa-home"></i> Información del Propietario
+        </div>
+        <div class="detail-row">
+            <div class="detail-item">
+                <span class="detail-label">RUT</span>
+                <div class="detail-value">{{ datos_usuario.propietario.rut|default:"No registrado" }}</div>
+            </div>
+            <div class="detail-item">
+                <span class="detail-label">Teléfono</span>
+                <div class="detail-value">{{ datos_usuario.propietario.telefono|default:"No registrado" }}</div>
+            </div>
+        </div>
+        <div class="detail-row">
+            <div class="detail-item">
+                <span class="detail-label">Nombre del Propietario</span>
+                <div class="detail-value">{{ datos_usuario.propietario.nombre|default:"No registrado" }}</div>
+            </div>
+        </div>
+        {% if datos_usuario.proyecto %}
+        <div class="detail-row">
+            <div class="detail-item">
+                <span class="detail-label">Proyecto Asignado</span>
+                <div class="detail-value">{{ datos_usuario.proyecto.nombre }}</div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    <!-- Información Técnica (si es técnico) -->
+    {% if datos_usuario.tecnico %}
+    <div class="detail-container">
+        <div class="section-title">
+            <i class="fas fa-tools"></i> Información Técnica
+        </div>
+        <div class="detail-row">
+            <div class="detail-item">
+                <span class="detail-label">RUT</span>
+                <div class="detail-value">{{ datos_usuario.tecnico.rut|default:"No registrado" }}</div>
+            </div>
+            <div class="detail-item">
+                <span class="detail-label">Teléfono</span>
+                <div class="detail-value">{{ datos_usuario.tecnico.telefono|default:"No registrado" }}</div>
+            </div>
+        </div>
+        <div class="detail-row">
+            <div class="detail-item">
+                <span class="detail-label">Especialidad</span>
+                <div class="detail-value">{{ datos_usuario.tecnico.especialidad|default:"No registrada" }}</div>
+            </div>
+            <div class="detail-item">
+                <span class="detail-label">Zona de Cobertura</span>
+                <div class="detail-value">{{ datos_usuario.tecnico.zona_cobertura|default:"No asignada" }}</div>
+            </div>
+        </div>
+        <div class="detail-row">
+            <div class="detail-item">
+                <span class="detail-label">Email Técnico</span>
+                <div class="detail-value">{{ datos_usuario.tecnico.email|default:"No registrado" }}</div>
+            </div>
+            <div class="detail-item">
+                <span class="detail-label">Estado del Técnico</span>
+                <div class="detail-value">
+                    {% if datos_usuario.tecnico.estado == 'activo' %}
+                        <span class="badge badge-success">Activo</span>
+                    {% else %}
+                        <span class="badge badge-danger">Inactivo</span>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Botones de Acción -->
+    <div class="detail-container">
+        <div class="button-group">
+            <a href="{% url 'admin_usuarios' %}" class="btn-volver">
+                <i class="fas fa-arrow-left"></i> Volver a Usuarios
+            </a>
+        </div>
+    </div>
+</div>
+{% endblock %}
+

@@ -142,13 +142,16 @@
                         {% else %}
                             <span class="badge bg-danger">Inactivo</span>
                         {% endif %}
-                        {% if item.tipo == 'Supervisor' or item.perfil.rol == 'supervisor' %}
-                            <div style="margin-top: 10px;">
+                        <div style="margin-top: 10px; display: flex; gap: 5px; justify-content: flex-end; flex-wrap: wrap;">
+                            <a href="{% url 'admin_detalle_usuario' item.user.id %}" class="btn btn-sm btn-outline-primary">
+                                <i class="bi bi-eye"></i> Detalle
+                            </a>
+                            {% if item.tipo == 'Perfil' and item.perfil.rol == 'supervisor' %}
                                 <a href="{% url 'admin_eliminar_supervisor' item.user.id %}" class="btn btn-sm btn-outline-danger">
                                     <i class="bi bi-trash"></i> Eliminar
                                 </a>
-                            </div>
-                        {% endif %}
+                            {% endif %}
+                        </div>
                     </div>
                 </div>
             </div>

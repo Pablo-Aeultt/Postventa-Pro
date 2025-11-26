@@ -3237,7 +3237,8 @@ def admin_usuarios(request):
         return redirect('mis_reclamos')
     
     constructora = admin_perfil.proyecto.constructora
-    proyectos_constructora = Proyecto.objects.filter(constructora=constructora)
+    # El administrador solo ve usuarios de su proyecto específico
+    proyecto_admin = admin_perfil.proyecto
     
     # Filtros
     rol = request.GET.get('rol', '')
@@ -3245,32 +3246,33 @@ def admin_usuarios(request):
     
     usuarios_data = []
     
-    # 1. Usuarios con Perfil (Propietarios, Supervisores)
-    usuarios_perfil = User.objects.filter(
-        perfil__proyecto__in=proyectos_constructora
-    ).distinct()
-    
-    if busqueda:
-        usuarios_perfil = usuarios_perfil.filter(
-            Q(username__icontains=busqueda) |
-            Q(email__icontains=busqueda) |
-            Q(first_name__icontains=busqueda)
-        )
-    
-    for user in usuarios_perfil:
-        perfil = Perfil.objects.filter(user=user).first()
+    # 1. Usuarios con Perfil (Supervisores, Administradores) del proyecto específico
+    if not rol or rol in ['administrador', 'supervisor']:
+        usuarios_perfil = User.objects.filter(
+            perfil__proyecto=proyecto_admin
+        ).distinct()
         
-        if rol and perfil and perfil.rol != rol:
-            continue
+        if busqueda:
+            usuarios_perfil = usuarios_perfil.filter(
+                Q(username__icontains=busqueda) |
+                Q(email__icontains=busqueda) |
+                Q(first_name__icontains=busqueda)
+            )
         
-        usuarios_data.append({
-            'user': user,
-            'perfil': perfil,
-            'tipo': 'Perfil',
-            'rol_display': perfil.rol if perfil else 'N/A'
-        })
+        for user in usuarios_perfil:
+            perfil = Perfil.objects.filter(user=user).first()
+            
+            if rol and perfil and perfil.rol != rol:
+                continue
+            
+            usuarios_data.append({
+                'user': user,
+                'perfil': perfil,
+                'tipo': 'Perfil',
+                'rol_display': perfil.rol if perfil else 'N/A'
+            })
     
-    # 2. Técnicos de la constructora
+    # 2. Técnicos de la constructora (todos los técnicos de la constructora pueden trabajar en este proyecto)
     if not rol or rol == 'tecnico':
         tecnicos = Tecnico.objects.filter(constructora=constructora)
         
@@ -3289,9 +3291,9 @@ def admin_usuarios(request):
                 'rol_display': 'Técnico'
             })
     
-    # 3. Propietarios de los proyectos
+    # 3. Propietarios del proyecto específico
     if not rol or rol == 'propietario':
-        propietarios = Propietario.objects.filter(proyecto__in=proyectos_constructora).distinct()
+        propietarios = Propietario.objects.filter(proyecto=proyecto_admin)
         
         if busqueda:
             propietarios = propietarios.filter(
@@ -3301,18 +3303,8 @@ def admin_usuarios(request):
             )
         
         for propietario in propietarios:
-            # Crear un objeto "virtual" para mantener consistencia en el template
-            class VirtualUser:
-                def __init__(self, nombre, email):
-                    self.first_name = nombre
-                    self.username = nombre.replace(' ', '_').lower()
-                    self.email = email or ''
-                    self.is_active = True
-            
-            virtual_user = VirtualUser(propietario.nombre, propietario.email)
-            
             usuarios_data.append({
-                'user': virtual_user,
+                'user': propietario.user,
                 'propietario': propietario,
                 'tipo': 'Propietario',
                 'rol_display': 'Propietario'
@@ -3323,10 +3315,78 @@ def admin_usuarios(request):
         'rol_filtro': rol,
         'busqueda': busqueda,
         'constructora': constructora,
+        'proyecto': proyecto_admin,
     }
     
     return render(request, 'admin/usuarios.html', context)
 
+
+@login_required
+def admin_detalle_usuario(request, usuario_id):
+    """Ver detalle de un usuario"""
+    if not request.user.is_staff:
+        messages.error(request, 'No tienes permiso para acceder a esta sección.')
+        return redirect('mis_reclamos')
+    
+    # Obtener perfil y constructora del admin
+    admin_perfil = Perfil.objects.filter(user=request.user, rol='administrador').first()
+    if not admin_perfil or not admin_perfil.proyecto:
+        messages.error(request, 'No tienes un proyecto asignado.')
+        return redirect('mis_reclamos')
+    
+    constructora = admin_perfil.proyecto.constructora
+    proyectos_constructora = Proyecto.objects.filter(constructora=constructora)
+    
+    # Obtener el usuario
+    try:
+        usuario = User.objects.get(id=usuario_id)
+    except User.DoesNotExist:
+        messages.error(request, 'Usuario no encontrado.')
+        return redirect('admin_usuarios')
+    
+    # Preparar datos del usuario
+    datos_usuario = {
+        'usuario': usuario,
+        'perfil': None,
+        'tecnico': None,
+        'propietario': None,
+        'tipo': 'desconocido'
+    }
+    
+    # 1. Verificar si es un Perfil (Supervisor/Administrador)
+    perfil = Perfil.objects.filter(user=usuario).first()
+    if perfil and perfil.proyecto and perfil.proyecto.constructora == constructora:
+        datos_usuario['perfil'] = perfil
+        datos_usuario['tipo'] = perfil.rol
+        datos_usuario['proyecto'] = perfil.proyecto
+    else:
+        # 2. Verificar si es un Técnico
+        try:
+            tecnico = Tecnico.objects.get(user=usuario)
+            if tecnico.constructora == constructora:
+                datos_usuario['tecnico'] = tecnico
+                datos_usuario['tipo'] = 'tecnico'
+        except Tecnico.DoesNotExist:
+            # 3. Verificar si es un Propietario
+            try:
+                propietario = Propietario.objects.get(user=usuario)
+                if propietario.proyecto and propietario.proyecto.constructora == constructora:
+                    datos_usuario['propietario'] = propietario
+                    datos_usuario['tipo'] = 'propietario'
+                    datos_usuario['proyecto'] = propietario.proyecto
+            except Propietario.DoesNotExist:
+                pass
+    
+    # Verificar permisos
+    if datos_usuario['tipo'] == 'desconocido':
+        messages.error(request, 'No tienes permiso para ver este usuario.')
+        return redirect('admin_usuarios')
+    
+    context = {
+        'datos_usuario': datos_usuario,
+    }
+    
+    return render(request, 'admin/detalle_usuario.html', context)
 
 @login_required
 def admin_tecnicos(request):

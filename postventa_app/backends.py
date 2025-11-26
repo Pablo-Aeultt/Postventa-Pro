@@ -13,7 +13,7 @@ class PropietarioBackend(BaseBackend):
         """
         Autentica usando RUT o Email del cliente
         username: puede ser RUT (con o sin formato) o email
-        password: contraseña del usuario o RUT limpio del cliente
+        password: contraseña del usuario 
         """
         if not username or not password:
             return None

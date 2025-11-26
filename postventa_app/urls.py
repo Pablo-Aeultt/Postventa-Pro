@@ -83,6 +83,7 @@ urlpatterns = [
     path('administrador-reclamos/', views.admin_reclamos, name='admin_reclamos'),
     path('administrador-reclamo/<int:reclamo_id>/', views.admin_detalle_reclamo, name='admin_detalle_reclamo'),
     path('administrador-usuarios/', views.admin_usuarios, name='admin_usuarios'),
+    path('administrador-detalle-usuario/<int:usuario_id>/', views.admin_detalle_usuario, name='admin_detalle_usuario'),
     path('administrador-crear-supervisor/', views.admin_crear_supervisor, name='admin_crear_supervisor'),
     path('administrador-eliminar-supervisor/<int:supervisor_id>/', views.admin_eliminar_supervisor, name='admin_eliminar_supervisor'),
     path('administrador-tecnicos/', views.admin_tecnicos, name='admin_tecnicos'),

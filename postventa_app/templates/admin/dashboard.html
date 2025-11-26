@@ -135,10 +135,12 @@
 
 /* Menu Grid */
 .menu-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    display: flex;
+    flex-wrap: nowrap;
     gap: 16px;
     margin-bottom: 30px;
+    overflow-x: auto;
+    padding-bottom: 10px;
 }
 
 .menu-item {
@@ -157,6 +159,8 @@
     justify-content: center;
     gap: 10px;
     cursor: pointer;
+    min-width: 160px;
+    flex-shrink: 0;
 }
 
 .menu-item:hover {
@@ -345,33 +349,28 @@
             </div>
         </div>
 
-        <!-- Navigation Sections -->
-        <div class="row">
-            <div class="col-12 mb-5">
-                <h5 class="section-title">
-                    <i class="fas fa-tasks"></i> Gestión de Reclamos
+        <!-- Navigation Sections - All Horizontal in One Row -->
+        <div style="display: flex; flex-wrap: nowrap; gap: 20px; overflow-x: auto; padding-bottom: 20px; margin-bottom: 30px;">
+            
+            <!-- Gestión de Reclamos -->
+            <div style="flex-shrink: 0; min-width: 300px;">
+                <h5 class="section-title" style="margin-bottom: 15px;">
+                    <i class="fas fa-tasks"></i> Reclamos
                 </h5>
-                <div class="menu-grid">
+                <div class="menu-grid" style="flex-direction: column; flex-wrap: wrap; overflow-x: visible;">
                     <a href="{% url 'admin_reclamos' %}" class="menu-item" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; text-decoration: none;">
                         <i class="fas fa-list"></i>
                         <span>Ver Reclamos</span>
                     </a>
-                    <a href="{% url 'admin_reclamos' %}?filtro=buscar" class="menu-item" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; text-decoration: none;">
-                        <i class="fas fa-search"></i>
-                        <span>Buscar</span>
-                    </a>
-                    <a href="{% url 'admin_reclamos' %}" class="menu-item" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; text-decoration: none;">
-                        <i class="fas fa-filter"></i>
-                        <span>Filtrar</span>
-                    </a>
                 </div>
             </div>
 
-            <div class="col-12 mb-5">
-                <h5 class="section-title">
-                    <i class="fas fa-users-cog"></i> Gestión de Usuarios
+            <!-- Gestión de Usuarios -->
+            <div style="flex-shrink: 0; min-width: 300px;">
+                <h5 class="section-title" style="margin-bottom: 15px;">
+                    <i class="fas fa-users-cog"></i> Usuarios
                 </h5>
-                <div class="menu-grid">
+                <div class="menu-grid" style="flex-direction: column; flex-wrap: wrap; overflow-x: visible;">
                     <a href="{% url 'admin_usuarios' %}" class="menu-item" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; text-decoration: none;">
                         <i class="fas fa-user-friends"></i>
                         <span>Ver Usuarios</span>
@@ -383,11 +382,12 @@
                 </div>
             </div>
 
-            <div class="col-12 mb-5">
-                <h5 class="section-title">
-                    <i class="fas fa-user-tie"></i> Gestión de Técnicos
+            <!-- Gestión de Técnicos -->
+            <div style="flex-shrink: 0; min-width: 300px;">
+                <h5 class="section-title" style="margin-bottom: 15px;">
+                    <i class="fas fa-user-tie"></i> Técnicos
                 </h5>
-                <div class="menu-grid">
+                <div class="menu-grid" style="flex-direction: column; flex-wrap: wrap; overflow-x: visible;">
                     <a href="{% url 'admin_tecnicos' %}" class="menu-item" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; text-decoration: none;">
                         <i class="fas fa-list"></i>
                         <span>Ver Técnicos</span>
@@ -399,11 +399,12 @@
                 </div>
             </div>
 
-            <div class="col-12 mb-5">
-                <h5 class="section-title">
+            <!-- Análisis -->
+            <div style="flex-shrink: 0; min-width: 300px;">
+                <h5 class="section-title" style="margin-bottom: 15px;">
                     <i class="fas fa-chart-bar"></i> Análisis
                 </h5>
-                <div class="menu-grid">
+                <div class="menu-grid" style="flex-direction: column; flex-wrap: wrap; overflow-x: visible;">
                     <a href="{% url 'admin_reportes' %}" class="menu-item" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; text-decoration: none;">
                         <i class="fas fa-chart-pie"></i>
                         <span>KPIs</span>
@@ -418,6 +419,7 @@
                     </a>
                 </div>
             </div>
+
         </div>
     </div>
 </div>

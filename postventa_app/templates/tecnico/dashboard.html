@@ -11,6 +11,15 @@
 .kpi-value { font-size:2rem; font-weight:700; }
 .btn-outline-primary { border: 2px solid var(--color-primary); color: var(--color-primary); font-weight: 600; border-radius: 10px; transition: all 0.3s ease; }
 .btn-outline-primary:hover { background: var(--color-primary); color: white; transform: translateY(-2px); box-shadow: 0 4px 12px rgba(26,77,77,0.2); }
+.cita-hoy { 
+  background: linear-gradient(90deg, #d1f2eb 0%, #e8f8f5 100%) !important; 
+  border: 3px solid #27ae60 !important;
+  border-radius: 6px;
+  font-weight: 600;
+  box-shadow: 0 4px 12px rgba(39, 174, 96, 0.15);
+}
+.cita-hoy td { color: #186a3b; font-weight: 600; }
+.badge-hoy { background: #27ae60 !important; color: white; font-weight: 700; padding: 4px 10px; border-radius: 4px; font-size: 0.85rem; margin-left: 8px; }
 
 </style>
 {% endblock %}
@@ -47,6 +56,27 @@
     {% endfor %}
   </div>
 
+  <!-- Alerta de citas de hoy -->
+  {% with today_citas=proximas_citas|dictsort:"fecha_programada" %}
+    {% if proximas_citas %}
+      {% for c in proximas_citas %}
+        {% if c.fecha_programada|date:"Y-m-d" == today|date:"Y-m-d" %}
+          {% if forloop.first %}
+          <div class="alert alert-success mt-4 mb-4" style="border-left: 6px solid #27ae60; background-color: #d1f2eb; border-radius: 8px; box-shadow: 0 4px 12px rgba(39, 174, 96, 0.15);">
+            <div class="d-flex align-items-center">
+              <i class="bi bi-calendar-check-fill" style="font-size: 1.5rem; color: #27ae60; margin-right: 12px;"></i>
+              <div>
+                <h5 class="mb-1" style="color: #186a3b; font-weight: 700;">📅 ¡CITAS DE HOY!</h5>
+                <p class="mb-0" style="color: #186a3b;">Tienes <strong>{{ proximas_citas|length }} cita(s)</strong> programada(s) para <strong>HOY</strong>. Verifica los detalles abajo.</p>
+              </div>
+            </div>
+          </div>
+          {% endif %}
+        {% endif %}
+      {% endfor %}
+    {% endif %}
+  {% endwith %}
+
   <div class="card-custom mt-4">
     <div class="card-header-custom"><i class="bi bi-clock"></i> Próximas citas</div>
     <div class="card-body p-0">
@@ -65,8 +95,13 @@
           <tbody>
           {% if proximas_citas %}
             {% for c in proximas_citas %}
-            <tr>
-              <td>{{ c.fecha_programada|date:'d/m/Y' }}</td>
+            <tr {% if c.fecha_programada|date:"Y-m-d" == today|date:"Y-m-d" %}class="cita-hoy"{% endif %}>
+              <td>
+                {{ c.fecha_programada|date:'d/m/Y' }}
+                {% if c.fecha_programada|date:"Y-m-d" == today|date:"Y-m-d" %}
+                  <span class="badge-hoy">HOY</span>
+                {% endif %}
+              </td>
               <td>{{ c.fecha_programada|time:'H:i' }}</td>
               <td>{{ c.id_cliente.nombre }}</td>
               <td>{{ c.id_reclamo.proyecto.nombre }}</td>
