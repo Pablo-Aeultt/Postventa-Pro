@@ -196,12 +196,7 @@
               </select>
             </div>
 
-            <!-- Volumen -->
-            <div class="mb-3">
-              <label for="volumen" class="form-label"><i class="bi bi-archive"></i> Volumen estimado (m³)</label>
-              <input type="number" class="form-control" id="volumen" step="0.1" min="0"
-                     placeholder="0.0" disabled value="{{ escombro.volumen_m3 }}" style="background-color: #f0f0f0;">
-            </div>
+
 
             <!-- Ubicación Exacta -->
             <div class="mb-3">
@@ -229,27 +224,11 @@
                      value="{% if escombro.fecha_programada_retiro %}{{ escombro.fecha_programada_retiro|date:'Y-m-d' }}{% endif %}">
             </div>
 
-            <!-- Fecha real de retiro -->
-            <div class="mb-3">
-              <label for="fecha_real_retiro" class="form-label"><i class="bi bi-calendar-check"></i> Fecha Real de Retiro</label>
-              <input type="date" class="form-control" id="fecha_real_retiro" name="fecha_real_retiro"
-                     value="{% if escombro.fecha_real_retiro %}{{ escombro.fecha_real_retiro|date:'Y-m-d' }}{% endif %}">
-            </div>
 
-            <!-- Empresa de retiro -->
-            <div class="mb-3">
-              <label for="empresa_retiro" class="form-label"><i class="bi bi-building"></i> Empresa de Retiro</label>
-              <input type="text" class="form-control" id="empresa_retiro" name="empresa_retiro" 
-                     placeholder="Nombre de la empresa responsable del retiro"
-                     value="{{ escombro.empresa_retiro|default:'' }}">
-            </div>
 
-            <!-- Costo -->
-            <div class="mb-3">
-              <label for="costo" class="form-label"><i class="bi bi-cash"></i> Costo (CLP)</label>
-              <input type="number" class="form-control" id="costo" name="costo" step="0.01" min="0"
-                     placeholder="0.00" value="{{ escombro.costo }}">
-            </div>
+
+
+
 
             <!-- Observaciones -->
             <div class="mb-4">

@@ -1250,17 +1250,15 @@ def dashboard_tecnico(request):
         messages.error(request, 'No se encontró información de técnico asociada a este usuario.')
         return redirect('mis_reclamos')
 
-    # KPIs: cantidad de citas, pendientes, en proceso, resueltas, etc.
+    # KPIs: cantidad de citas, pendientes, resueltas, etc.
     total_citas = Cita.objects.filter(id_tecnico=tecnico).count()
     citas_pendientes = Cita.objects.filter(id_tecnico=tecnico, estado='pendiente').count()
-    citas_en_proceso = Cita.objects.filter(id_tecnico=tecnico, estado__in=['confirmada', 'en_curso']).count()
     citas_completadas = Cita.objects.filter(id_tecnico=tecnico, estado='completada').count()
     citas_proximas_count = Cita.objects.filter(id_tecnico=tecnico, estado__in=['pendiente', 'confirmada']).count()
 
     kpi_cards = [
         ("Total Citas", "primary", total_citas),
         ("Pendientes", "warning", citas_pendientes),
-        ("En Proceso", "info", citas_en_proceso),
         ("Completadas", "success", citas_completadas),
         ("Próximas", "secondary", citas_proximas_count),
     ]
@@ -1773,10 +1771,7 @@ def tecnico_actualizar_escombro(request, escombro_id):
         # Actualizar datos
         nuevo_estado = request.POST.get('estado', escombro.estado)
         fecha_programada = request.POST.get('fecha_programada_retiro', '')
-        fecha_real = request.POST.get('fecha_real_retiro', '')
-        empresa = request.POST.get('empresa_retiro', '').strip()
         ubicacion = request.POST.get('ubicacion_exacta', '').strip()
-        costo = request.POST.get('costo', escombro.costo)
         observaciones = request.POST.get('observaciones', '').strip()
         
         escombro.estado = nuevo_estado
@@ -1786,16 +1781,6 @@ def tecnico_actualizar_escombro(request, escombro_id):
                 escombro.fecha_programada_retiro = fecha_programada
             except:
                 pass
-        if fecha_real:
-            try:
-                escombro.fecha_real_retiro = fecha_real
-            except:
-                pass
-        escombro.empresa_retiro = empresa
-        try:
-            escombro.costo = float(costo) if costo else 0
-        except:
-            pass
         escombro.observaciones = observaciones
         
         escombro.save()
