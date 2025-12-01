@@ -28,6 +28,8 @@
         </div>
     </div>
 
+    {# El gráfico de tendencia se mostrará dentro de la pestaña "Análisis" más abajo #}
+
     <!-- Filtros de Fecha y Proyecto -->
     <div class="row mb-4">
         <div class="col-12">
@@ -114,6 +116,35 @@
                 </div>
                 {% endfor %}
             </div>
+
+            {% if categoria == 'Análisis' and labels_tendencia and valores_tendencia %}
+            <div class="row mb-4">
+                <div class="col-12">
+                    <div class="card border-0 shadow-sm">
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <h5 class="card-title mb-0" style="color: #1A4D4D;">
+                                    <i class="fas fa-chart-area"></i> Tendencia de Reclamos (mes)
+                                </h5>
+                                {% if fecha_inicio or fecha_fin %}
+                                <small class="text-muted">
+                                    <i class="fas fa-calendar"></i>
+                                    {% if fecha_inicio and fecha_fin %}
+                                        {{ fecha_inicio }} a {{ fecha_fin }}
+                                    {% elif fecha_inicio %}
+                                        Desde {{ fecha_inicio }}
+                                    {% elif fecha_fin %}
+                                        Hasta {{ fecha_fin }}
+                                    {% endif %}
+                                </small>
+                                {% endif %}
+                            </div>
+                            <canvas id="tendencia-admin" height="100"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
             
             <!-- Sección Especial: Desglose de Materiales para pestaña Costo -->
             {% if categoria == 'Costo' and kpis_por_categoria|get_item:categoria %}
@@ -235,6 +266,38 @@
 
 <!-- Chart.js Library -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
+
+{% if labels_tendencia and valores_tendencia %}
+<script>
+    (function() {
+        const ctx = document.getElementById('tendencia-admin');
+        if (!ctx) return;
+        const labels = {{ labels_tendencia|safe }};
+        const dataVals = {{ valores_tendencia|safe }};
+        const chart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'Reclamos por día',
+                    data: dataVals,
+                    borderColor: '#1A4D4D',
+                    backgroundColor: 'rgba(26,77,77,0.15)',
+                    tension: 0.3,
+                    fill: true,
+                }]
+            },
+            options: {
+                plugins: { legend: { display: false } },
+                scales: {
+                    x: { grid: { display: false } },
+                    y: { beginAtZero: true, grid: { color: 'rgba(0,0,0,0.05)' } }
+                }
+            }
+        });
+    })();
+</script>
+{% endif %}
 
 {% endblock %}
 

@@ -1278,13 +1278,21 @@ def dashboard_tecnico(request):
         c for c in proximas_citas_raw 
         if c.id_reclamo and c.id_reclamo.id_reclamo
     ][:10]
+    
+    # Contar solo citas de hoy
+    today = date.today()
+    citas_hoy = [
+        c for c in proximas_citas 
+        if c.fecha_programada.date() == today
+    ]
 
     context = {
         'tecnico': tecnico,
         'perfil': perfil,
         'kpi_cards': kpi_cards,
         'proximas_citas': proximas_citas,
-        'today': date.today(),
+        'citas_hoy': citas_hoy,
+        'today': today,
     }
     return render(request, 'tecnico/dashboard.html', context)
 
@@ -2123,11 +2131,14 @@ def dashboard_kpis(request):
         datos_adicionales = {k: v for k, v in kpi_data.items() if k not in ['valor', 'unidad']}
         
         # Para KPI_09, si tiene categorias pero no valor, usar el porcentaje más alto
-        if kpi_id == 'KPI_09' and 'categorias' in kpi_data and valor is None:
-            categorias = kpi_data.get('categorias', [])
-            if categorias:
-                # Usar el porcentaje del primer elemento (o el máximo)
-                valor = max([c.get('porcentaje', 0) for c in categorias]) if categorias else None
+        if kpi_id == 'KPI_09' and 'categorias' in kpi_data:
+            # Limpiar categorías sin nombre y ordenar (sin recortar a top 3)
+            categorias = [c for c in kpi_data.get('categorias', []) if c.get('categoria')]
+            categorias = sorted(categorias, key=lambda x: x.get('porcentaje', 0), reverse=True)
+            kpi_data['categorias'] = categorias
+            if valor is None and categorias:
+                # Usar el porcentaje máximo entre las categorías válidas
+                valor = categorias[0].get('porcentaje', 0)
         
         # Para KPI_11, si tiene tecnicos pero no valor, calcular promedio
         if kpi_id == 'KPI_11' and 'tecnicos' in kpi_data and valor is None:
@@ -2176,6 +2187,8 @@ def dashboard_kpis(request):
     # Formatear fechas a DD/MM/YYYY para mostrar en el template
     fecha_inicio_display = fecha_inicio.strftime('%d/%m/%Y') if fecha_inicio else None
     fecha_fin_display = fecha_fin.strftime('%d/%m/%Y') if fecha_fin else None
+
+    # (Sección de tendencia mensual movida al final de admin_reportes)
     
     context = {
         'supervisor': supervisor,
@@ -3151,6 +3164,10 @@ def admin_reclamos(request):
     estado = request.GET.get('estado', '')
     busqueda = request.GET.get('q', '')
     proyecto_id = request.GET.get('proyecto', '')
+    especialidad_id = request.GET.get('especialidad', '')
+    tecnico_id = request.GET.get('tecnico', '')
+    fecha_inicio_str = request.GET.get('fecha_inicio', '')
+    fecha_fin_str = request.GET.get('fecha_fin', '')
     
     # Solo mostrar reclamos de proyectos de su constructora
     reclamos = Reclamo.objects.filter(proyecto__in=proyectos_constructora).select_related('propietario', 'proyecto')
@@ -3171,14 +3188,50 @@ def admin_reclamos(request):
         if proyecto:
             reclamos = reclamos.filter(proyecto_id=proyecto_id)
     
+    if especialidad_id:
+        reclamos = reclamos.filter(categoria_id=especialidad_id)
+    
+    if tecnico_id:
+        reclamos = reclamos.filter(tecnico_asignado_id=tecnico_id)
+
+    # Filtro por rango de fechas (fecha_ingreso)
+    # Acepta `YYYY-MM-DD` y aplica día completo para fin
+    if fecha_inicio_str:
+        try:
+            fecha_inicio = datetime.strptime(fecha_inicio_str, '%Y-%m-%d')
+            fecha_inicio = timezone.make_aware(datetime.combine(fecha_inicio.date(), datetime.min.time()))
+            reclamos = reclamos.filter(fecha_ingreso__gte=fecha_inicio)
+        except ValueError:
+            pass
+    if fecha_fin_str:
+        try:
+            fecha_fin = datetime.strptime(fecha_fin_str, '%Y-%m-%d')
+            # fin del día
+            fecha_fin_dt = timezone.make_aware(datetime.combine(fecha_fin.date(), datetime.max.time()))
+            reclamos = reclamos.filter(fecha_ingreso__lte=fecha_fin_dt)
+        except ValueError:
+            pass
+    
     reclamos = reclamos.order_by('-fecha_ingreso')
+    
+    # Obtener todas las especialidades para el filtro
+    especialidades = Especialidad.objects.all().order_by('nombre')
+    
+    # Obtener todos los técnicos de la constructora
+    tecnicos = Tecnico.objects.filter(constructora=constructora).order_by('nombre')
     
     context = {
         'reclamos': reclamos,
         'estado_filtro': estado,
         'busqueda': busqueda,
         'proyecto_filtro': proyecto_id,
+        'especialidad_filtro': especialidad_id,
+        'tecnico_filtro': tecnico_id,
+        'fecha_inicio': fecha_inicio_str,
+        'fecha_fin': fecha_fin_str,
         'proyectos': proyectos_constructora,
+        'especialidades': especialidades,
+        'tecnicos': tecnicos,
         'constructora': constructora,
     }
     
@@ -3595,6 +3648,37 @@ def admin_reportes(request):
     fecha_inicio_display = fecha_inicio.strftime('%d/%m/%Y') if fecha_inicio else None
     fecha_fin_display = fecha_fin.strftime('%d/%m/%Y') if fecha_fin else None
     
+    # Calcular tendencia mensual (igual a supervisor) usando proyecto_para_kpi
+    try:
+        base_date = None
+        if fecha_inicio and fecha_fin and fecha_inicio.year == fecha_fin.year and fecha_inicio.month == fecha_fin.month:
+            base_date = fecha_inicio
+        elif fecha_inicio:
+            base_date = fecha_inicio
+        else:
+            base_date = date.today()
+
+        primer_dia_mes = date(base_date.year, base_date.month, 1)
+        tendencia_mensual = Reclamo.objects.filter(
+            proyecto=proyecto_para_kpi,
+            fecha_ingreso__gte=timezone.make_aware(datetime.combine(primer_dia_mes, datetime.min.time())),
+            estado__in=['ingresado', 'asignado', 'en_ejecucion', 'en_proceso', 'resuelto', 'completado']
+        ).exclude(estado='cancelado').annotate(
+            fecha=TruncDate('fecha_ingreso')
+        ).values('fecha').annotate(count=Count('id_reclamo')).order_by('fecha')
+
+        dias_en_mes = calendar.monthrange(primer_dia_mes.year, primer_dia_mes.month)[1]
+        datos_mes = {date(primer_dia_mes.year, primer_dia_mes.month, d): 0 for d in range(1, dias_en_mes + 1)}
+        for item in tendencia_mensual:
+            if item['fecha'] in datos_mes:
+                datos_mes[item['fecha']] = item['count']
+
+        labels_tendencia = [str(d) for d in range(1, dias_en_mes + 1)]
+        valores_tendencia = [datos_mes.get(date(primer_dia_mes.year, primer_dia_mes.month, d), 0) for d in range(1, dias_en_mes + 1)]
+    except Exception:
+        labels_tendencia = []
+        valores_tendencia = []
+
     context = {
         'constructora': constructora,
         'kpis': kpis_formateados,
@@ -3606,6 +3690,8 @@ def admin_reportes(request):
         'categorias': list(kpis_por_categoria.keys()),
         'proyectos_constructora': proyectos_constructora,
         'proyecto_seleccionado': proyecto_seleccionado,
+        'labels_tendencia': labels_tendencia,
+        'valores_tendencia': valores_tendencia,
     }
     
     return render(request, 'admin/reportes.html', context)

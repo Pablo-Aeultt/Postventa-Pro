@@ -62,21 +62,38 @@
                             <strong>Distribución de Fallas:</strong>
                             {% if kpi.datos_adicionales.categorias %}
                                 <div style="position: relative; height: 250px; margin-top: 15px;">
-                                    <canvas id="chart_kpi_09" class="kpi-chart"></canvas>
+                                    <canvas id="{{ "chart_kpi_09_"|add:kpi.nombre|slugify }}" class="kpi-chart"></canvas>
                                 </div>
                                 <script type="text/javascript">
                                 document.addEventListener('DOMContentLoaded', function() {
                                     setTimeout(function() {
                                         if (typeof Chart !== 'undefined') {
-                                            const element = document.getElementById('chart_kpi_09');
+                                            const element = document.getElementById('{{ "chart_kpi_09_"|add:kpi.nombre|slugify }}');
                                             if (element) {
                                                 const ctx = element.getContext('2d');
+                                                // Construir arrays sincronizados (máximo 3)
+                                                const labels = [];
+                                                const counts = [];
+                                                {% for cat in kpi.datos_adicionales.categorias %}
+                                                    {% if forloop.counter <= 3 %}
+                                                        labels.push('{{ cat.categoria }} ({{ cat.cantidad }})');
+                                                        counts.push({{ cat.cantidad }});
+                                                    {% endif %}
+                                                {% endfor %}
+
+                                                // Calcular porcentajes desde los conteos para máxima precisión
+                                                const total = counts.reduce((a,b)=>a+b,0);
+                                                const data = counts.map(c => total ? +( (c*100/total).toFixed(2) ) : 0);
+
+                                                // Asegurar sincronía exacta: truncar data al tamaño de labels
+                                                while (data.length > labels.length) { data.pop(); }
+
                                                 new Chart(ctx, {
                                                     type: 'doughnut',
                                                     data: {
-                                                        labels: [{% for cat in kpi.datos_adicionales.categorias %}'{{ cat.categoria }} ({{ cat.cantidad }})'{% if not forloop.last %},{% endif %}{% endfor %}],
+                                                        labels: labels,
                                                         datasets: [{
-                                                            data: [{% for cat in kpi.datos_adicionales.categorias %}{{ cat.porcentaje }}{% if not forloop.last %},{% endif %}{% endfor %}],
+                                                            data: data,
                                                             backgroundColor: ['#0d6efd', '#6f42c1', '#198754', '#fd7e14', '#dc3545', '#20c997', '#17a2b8', '#ffc107', '#6c757d'],
                                                             borderColor: '#fff',
                                                             borderWidth: 2
@@ -97,6 +114,11 @@
                                                         }
                                                     }
                                                 });
+                                                // Diagnóstico en consola: verificar labels y data
+                                                try {
+                                                    console.log('KPI_09 labels:', labels);
+                                                    console.log('KPI_09 data:', data);
+                                                } catch (e) {}
                                             }
                                         }
                                     }, 500);
@@ -104,6 +126,20 @@
                                 </script>
                             {% endif %}
                         </div>
+                        <!-- Listado legible de especialidades -->
+                        {% if kpi.datos_adicionales.categorias %}
+                        <div class="mt-3">
+                            <small class="text-muted d-block mb-2">ESPECIALIDADES</small>
+                            <ul class="list-unstyled mb-0" style="font-size: 0.9rem;">
+                                {% for cat in kpi.datos_adicionales.categorias %}
+                                    <li>
+                                        <span style="font-weight: 600; color: #1A4D4D;">{{ cat.categoria }}</span>
+                                        <span class="text-muted">— {{ cat.porcentaje|floatformat:1 }}{{ kpi.unidad }}</span>
+                                    </li>
+                                {% endfor %}
+                            </ul>
+                        </div>
+                        {% endif %}
                     {% elif kpi.id == 'KPI_11' and kpi.datos_adicionales.tecnicos %}
                         <!-- Caso especial: KPI_11 con tecnicos -->
                         <div style="font-size: 0.9rem;">

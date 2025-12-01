@@ -57,25 +57,16 @@
   </div>
 
   <!-- Alerta de citas de hoy -->
-  {% with today_citas=proximas_citas|dictsort:"fecha_programada" %}
-    {% if proximas_citas %}
-      {% for c in proximas_citas %}
-        {% if c.fecha_programada|date:"Y-m-d" == today|date:"Y-m-d" %}
-          {% if forloop.first %}
-          <div class="alert alert-success mt-4 mb-4" style="border-left: 6px solid #27ae60; background-color: #d1f2eb; border-radius: 8px; box-shadow: 0 4px 12px rgba(39, 174, 96, 0.15);">
-            <div class="d-flex align-items-center">
-              <i class="bi bi-calendar-check-fill" style="font-size: 1.5rem; color: #27ae60; margin-right: 12px;"></i>
-              <div>
-                <h5 class="mb-1" style="color: #186a3b; font-weight: 700;">📅 ¡CITAS DE HOY!</h5>
-                <p class="mb-0" style="color: #186a3b;">Tienes <strong>{{ proximas_citas|length }} cita(s)</strong> programada(s) para <strong>HOY</strong>. Verifica los detalles abajo.</p>
-              </div>
-            </div>
-          </div>
-          {% endif %}
-        {% endif %}
-      {% endfor %}
-    {% endif %}
-  {% endwith %}
+  {% if citas_hoy %}
+  <div class="alert alert-success mt-4 mb-4" style="border-left: 6px solid #27ae60; background-color: #d1f2eb; border-radius: 8px; box-shadow: 0 4px 12px rgba(39, 174, 96, 0.15);">
+    <div class="d-flex align-items-center">
+      <div>
+        <h5 class="mb-1" style="color: #186a3b; font-weight: 700;">CITAS DE HOY</h5>
+        <p class="mb-0" style="color: #186a3b;">Tienes <strong>{{ citas_hoy|length }} cita(s)</strong> programada(s) para <strong>HOY</strong>. Verifica los detalles abajo.</p>
+      </div>
+    </div>
+  </div>
+  {% endif %}
 
   <div class="card-custom mt-4">
     <div class="card-header-custom"><i class="bi bi-clock"></i> Próximas citas</div>

@@ -4,6 +4,7 @@ Versión simplificada con manejo de errores
 """
 
 from django.db.models import Count, Avg, Sum, F, ExpressionWrapper, DecimalField
+from django.db.models import Q
 from django.utils import timezone
 from datetime import datetime
 from decimal import Decimal
@@ -262,7 +263,26 @@ class KPICalculator:
     def kpi_09_frecuencia_tipos_falla(proyecto=None, fecha_inicio=None, fecha_fin=None):
         """KPI 9: Índice de Frecuencia de Tipos de Falla (%)"""
         try:
-            query = Reclamo.objects.exclude(estado='cancelado')
+            # Base: reclamos NO CANCELADOS (histórico) con proyecto/rango si aplica
+            base = Reclamo.objects.exclude(estado='cancelado')
+            if proyecto:
+                base = base.filter(proyecto=proyecto)
+            if fecha_inicio and fecha_fin:
+                base = base.filter(fecha_ingreso__range=[fecha_inicio, fecha_fin])
+
+            # Diagnóstico: contar reclamos sin especialidad o nombre vacío
+            sin_especialidad = base.filter(
+                Q(categoria__isnull=True) |
+                Q(categoria__nombre__isnull=True) |
+                Q(categoria__nombre='') |
+                Q(categoria__nombre__regex=r'^\s+$')
+            )
+
+            # Query efectiva: solo con especialidad válida y nombre
+            query = base.filter(categoria__isnull=False) \
+                         .exclude(categoria__nombre__isnull=True) \
+                         .exclude(categoria__nombre='') \
+                         .exclude(categoria__nombre__regex=r'^\s+$')
             if proyecto:
                 query = query.filter(proyecto=proyecto)
             if fecha_inicio and fecha_fin:
@@ -270,19 +290,35 @@ class KPICalculator:
             
             total = query.count()
             if total == 0:
-                return {"categorias": [], "unidad": "%"}
+                # Fallback: usar todos los reclamos no cancelados con especialidad válida
+                query = (
+                    Reclamo.objects
+                    .exclude(estado='cancelado')
+                    .filter(categoria__isnull=False)
+                    .exclude(categoria__nombre__isnull=True)
+                    .exclude(categoria__nombre='')
+                )
+                if proyecto:
+                    query = query.filter(proyecto=proyecto)
+                if fecha_inicio and fecha_fin:
+                    query = query.filter(fecha_ingreso__range=[fecha_inicio, fecha_fin])
+                total = query.count()
+                if total == 0:
+                    return {"categorias": [], "unidad": "%"}
             
-            # Agrupar por categoría (especialidad) con su nombre
+            # Agrupar por categoría (especialidad)
             datos = query.values('categoria__nombre').annotate(
                 cantidad=Count('id_reclamo')
             ).order_by('-cantidad')
             
             resultado = []
             for d in datos:
-                if d['categoria__nombre']:
+                # Filtrar solo los que tienen nombre
+                nombre_categoria = d.get('categoria__nombre')
+                if nombre_categoria:  # Excluir None y strings vacíos
                     pct = (d['cantidad'] / total) * 100
                     resultado.append({
-                        "categoria": d['categoria__nombre'],  # Ahora usa el nombre
+                        "categoria": nombre_categoria,
                         "cantidad": d['cantidad'],
                         "porcentaje": round(pct, 2)
                     })
