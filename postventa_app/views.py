@@ -2189,6 +2189,33 @@ def dashboard_kpis(request):
     fecha_fin_display = fecha_fin.strftime('%d/%m/%Y') if fecha_fin else None
 
     # (Sección de tendencia mensual movida al final de admin_reportes)
+    # Tendencia mensual (reclamos por día) igual que dashboard supervisor
+    try:
+        base_date = None
+        if fecha_inicio and fecha_fin and fecha_inicio.year == fecha_fin.year and fecha_inicio.month == fecha_fin.month:
+            base_date = fecha_inicio
+        elif fecha_inicio:
+            base_date = fecha_inicio
+        else:
+            base_date = date.today()
+        primer_dia_mes = date(base_date.year, base_date.month, 1)
+        tendencia_qs = Reclamo.objects.filter(
+            proyecto=supervisor.proyecto,
+            fecha_ingreso__gte=timezone.make_aware(datetime.combine(primer_dia_mes, datetime.min.time())),
+            estado__in=['ingresado', 'asignado', 'en_ejecucion', 'en_proceso', 'resuelto', 'completado']
+        ).exclude(estado='cancelado').annotate(
+            fecha=TruncDate('fecha_ingreso')
+        ).values('fecha').annotate(count=Count('id_reclamo')).order_by('fecha')
+        dias_en_mes = calendar.monthrange(primer_dia_mes.year, primer_dia_mes.month)[1]
+        datos_mes = {date(primer_dia_mes.year, primer_dia_mes.month, d): 0 for d in range(1, dias_en_mes + 1)}
+        for item in tendencia_qs:
+            if item['fecha'] in datos_mes:
+                datos_mes[item['fecha']] = item['count']
+        labels_tendencia = [str(d) for d in range(1, dias_en_mes + 1)]
+        valores_tendencia = [datos_mes.get(date(primer_dia_mes.year, primer_dia_mes.month, d), 0) for d in range(1, dias_en_mes + 1)]
+    except Exception:
+        labels_tendencia = []
+        valores_tendencia = []
     
     context = {
         'supervisor': supervisor,
@@ -2199,6 +2226,8 @@ def dashboard_kpis(request):
         'fecha_inicio_input': fecha_inicio_str,  # Para mantener en el input del formulario
         'fecha_fin_input': fecha_fin_str,        # Para mantener en el input del formulario
         'categorias': list(kpis_por_categoria.keys()),
+        'labels_tendencia': labels_tendencia,
+        'valores_tendencia': valores_tendencia,
     }
     
     return render(request, 'supervisor/kpis_dashboard.html', context)
